@@ -7,10 +7,25 @@
     --font-sans: 'Lora', Georgia, 'Times New Roman', serif;
     --font-handwriting: 'Kalam', 'Segoe Print', cursive, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    color-scheme: light;
+  }
+
+  html {
+    background-color: #EFE2CC;
+  }
+
+  html.dark {
+    background-color: #16120F;
+    color-scheme: dark;
   }
 
   body {
     font-family: var(--font-sans);
+    background-color: #EFE2CC;
+  }
+
+  html.dark body {
+    background-color: #16120F;
   }
 }
 

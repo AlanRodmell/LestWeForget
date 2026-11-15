@@ -120,6 +120,23 @@ export const BackupSettingsView: React.FC<BackupSettingsViewProps> = ({
     setStatusMessage('Labels saved.');
   };
 
+  const handleClearPwaCache = async () => {
+    setStatusMessage('Refreshing cached app shell...');
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((reg) => reg.unregister()));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      }
+    } catch {
+      // Ignore cache cleanup errors and reload
+    }
+    window.location.reload();
+  };
+
   return (
     <section className="mx-auto max-w-4xl space-y-6 pb-10">
       <h1 className="font-display text-3xl font-semibold tracking-tight text-[#241D17] dark:text-[#EFE6D8]">
@@ -330,7 +347,7 @@ export const BackupSettingsView: React.FC<BackupSettingsViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <button
                 type="submit"
                 aria-label="Save labels"
@@ -339,7 +356,17 @@ export const BackupSettingsView: React.FC<BackupSettingsViewProps> = ({
               >
                 <Check className="h-4 w-4" />
               </button>
-              <PWAInstallButton />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleClearPwaCache()}
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[#D7CBB8] bg-[#F5EFE4] px-3 py-1.5 text-xs font-medium text-[#614933] hover:bg-[#EAE1D3] dark:border-[#3B3026] dark:bg-[#16120F] dark:text-[#B5A693] dark:hover:bg-[#29211B]"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Refresh App Cache</span>
+                </button>
+                <PWAInstallButton />
+              </div>
             </div>
           </form>
         </div>
