@@ -8,7 +8,7 @@
 4. **Immutable Identity & Temporal Integrity**: `id`, `vaultId`, `authorUid`, and `createdAt` are immutable after creation. `authorUid` must equal `request.auth.uid` on creation. `createdAt` must equal `request.time` on creation, and `updatedAt` must equal `request.time` on both creation and updates.
 5. **Zero Shadow Fields**: Document creation strictly validates `hasAll` and `hasOnly` key sets; updates use action-based `affectedKeys().hasOnly(...)` allowlists.
 6. **Zero Query Delegation**: `allow list` on `/vaults/{vaultId}/entries` explicitly enforces `isAllowedCoupleMember()` and `resource.data.vaultId == 'couple_vault'` without `get()`/`exists()` calls.
-7. **Per-Member Read State Isolation**: Each allowlisted member's `lastSeenMs` cursor lives at `/vaults/couple_vault/members/{memberId}` where `memberId == request.auth.uid`, contains zero PII (only `uid`, `vaultId`, `lastSeenMs`, `updatedAt`), and is readable/writable only by that specific authenticated member.
+7. **Per-Member Read State Isolation**: Each allowlisted member's `lastSeenMs` cursor and optional `recentDrawIds` shuffle history (bounded to at most 50 entry IDs) live at `/vaults/couple_vault/members/{memberId}` where `memberId == request.auth.uid`, contain zero PII (only `uid`, `vaultId`, `lastSeenMs`, optional `recentDrawIds`, and `updatedAt`), and are readable/writable only by that specific authenticated member.
 
 ## 2. The "Dirty Dozen" Adversarial Payloads
 

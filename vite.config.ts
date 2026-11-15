@@ -17,9 +17,9 @@ export default defineConfig(() => {
           id: './',
           name: 'Lest We Forget',
           short_name: 'LestWeForget',
-          description: 'A minimalist offline-first gratitude vault displaying shared moments on white and brown kraft gift tags.',
-          theme_color: '#3E5C4E',
-          background_color: '#F6F3EE',
+          description: 'A minimalist offline-first gratitude vault displaying shared moments on white and brown kraft tags.',
+          theme_color: '#A65E22',
+          background_color: '#F5EFE4',
           display: 'standalone',
           orientation: 'portrait-primary',
           start_url: './',
@@ -47,37 +47,10 @@ export default defineConfig(() => {
         },
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365,
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            {
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'gstatic-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365,
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-          ],
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
+          globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff,woff2}'],
         },
         devOptions: {
           enabled: true,

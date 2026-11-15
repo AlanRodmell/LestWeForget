@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Heart, Pencil, RotateCw, Trash2, Check, X } from 'lucide-react';
+import { Check, Clock, Heart, Pencil, RotateCw, Trash2, X } from 'lucide-react';
 import type { AppPreferences, GratitudeEntry } from '../types';
 
 interface GiftTagCardProps {
@@ -82,7 +82,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
       }
 
       const computed = getComputedStyle(measurer);
-      const lineHeight = parseFloat(computed.lineHeight) || (spotlight ? 30 : 27);
+      const lineHeight = parseFloat(computed.lineHeight) || (spotlight ? 28 : 26);
       const maxAllowedHeight = lineHeight * 4 + 3;
 
       measurer.textContent = `“${text}”`;
@@ -116,7 +116,6 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
         }
       }
 
-      // Fallback for single very long unbroken word/string
       if (bestIdx <= 0) {
         let lo = 1;
         let hi = text.length - 1;
@@ -184,46 +183,46 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
     };
   }, [entry.text, spotlight]);
 
-  const isKraft = entry.tagStyle === 'kraft';
+  const isKraft = entry.perspective === 'from_her';
   const perspectiveLabel =
     entry.perspective === 'from_me' ? prefs.meLabel : prefs.herLabel;
 
   const paperColors = isKraft
     ? {
-        bgClass: 'bg-[#DFC5A4] dark:bg-[#3B2E21]',
-        borderClass: 'border-[#BA9870] dark:border-[#5D4835]',
-        fillVar: 'fill-[#DFC5A4] dark:fill-[#3B2E21]',
-        strokeVar: 'stroke-[#BA9870] dark:stroke-[#5D4835]',
+        bgClass: 'bg-[#DCC19B] dark:bg-[#382B1E]',
+        borderClass: 'border-[#B59267] dark:border-[#5D4834]',
+        fillVar: 'fill-[#DCC19B] dark:fill-[#382B1E]',
+        strokeVar: 'stroke-[#B59267] dark:stroke-[#5D4834]',
         grainClass: 'paper-grain-kraft',
-        inkClass: 'text-[#2A1F14] dark:text-[#F5E9DA]',
-        mutedClass: 'text-[#5C4733] dark:text-[#C7B096]',
-        dividerClass: 'border-[#BA9870]/45 dark:border-[#5D4835]/70',
-        eyeletRingClass: 'border-[#A68259] dark:border-[#7B6148]',
-        heartTintClass: 'text-[#8C3B2B] dark:text-[#DF8A79]',
+        inkClass: 'text-[#291E14] dark:text-[#F4E8D6]',
+        mutedClass: 'text-[#614B35] dark:text-[#C8B194]',
+        dividerClass: 'border-[#B59267]/50 dark:border-[#5D4834]/75',
+        eyeletRingClass: 'border-[#8F6E45] dark:border-[#A88558]',
+        heartTintClass: 'text-[#9E561E] dark:text-[#E29A50]',
         flipBtnClass:
-          'text-[#4B3826] hover:bg-black/5 dark:text-[#EAD6BE] dark:hover:bg-white/10',
+          'text-[#533D28] hover:bg-black/5 dark:text-[#DFC8AA] dark:hover:bg-white/10',
       }
     : {
-        bgClass: 'bg-[#FAF8F4] dark:bg-[#2A2622]',
-        borderClass: 'border-[#DDD4C7] dark:border-[#423B34]',
-        fillVar: 'fill-[#FAF8F4] dark:fill-[#2A2622]',
-        strokeVar: 'stroke-[#DDD4C7] dark:stroke-[#423B34]',
+        bgClass: 'bg-[#FBF7EE] dark:bg-[#26201B]',
+        borderClass: 'border-[#D7CBB8] dark:border-[#42362B]',
+        fillVar: 'fill-[#FBF7EE] dark:fill-[#26201B]',
+        strokeVar: 'stroke-[#D7CBB8] dark:stroke-[#42362B]',
         grainClass: 'paper-grain-white',
-        inkClass: 'text-[#221F1B] dark:text-[#F2ECE4]',
-        mutedClass: 'text-[#6B6257] dark:text-[#AEA498]',
-        dividerClass: 'border-[#DDD4C7]/75 dark:border-[#423B34]/80',
-        eyeletRingClass: 'border-[#C8BEB0] dark:border-[#5A5046]',
-        heartTintClass: 'text-[#9C4A3B] dark:text-[#DF8A79]',
+        inkClass: 'text-[#241D17] dark:text-[#EFE6D8]',
+        mutedClass: 'text-[#6E6153] dark:text-[#B5A693]',
+        dividerClass: 'border-[#D7CBB8]/80 dark:border-[#42362B]/85',
+        eyeletRingClass: 'border-[#A65E22]/75 dark:border-[#D48C46]',
+        heartTintClass: 'text-[#A65E22] dark:text-[#E29A50]',
         flipBtnClass:
-          'text-[#3E5C4E] hover:bg-black/5 dark:text-[#86B39D] dark:hover:bg-white/10',
+          'text-[#A65E22] hover:bg-black/5 dark:text-[#E29A50] dark:hover:bg-white/10',
       };
 
   const frontNoteTypography = spotlight
-    ? 'font-handwriting text-[22px] leading-[1.35] text-center whitespace-pre-line break-words'
-    : 'font-handwriting text-[20px] leading-[1.35] text-center whitespace-pre-line break-words';
+    ? 'font-handwriting text-[20px] leading-[1.4] text-center whitespace-pre-line break-words'
+    : 'font-handwriting text-[18.5px] leading-[1.4] text-center whitespace-pre-line break-words';
 
   const backNoteTypography = split.compactBack
-    ? 'font-handwriting text-[17px] leading-[1.28] text-center whitespace-pre-line break-words'
+    ? 'font-handwriting text-[16px] leading-[1.32] text-center whitespace-pre-line break-words'
     : frontNoteTypography;
 
   // Fixed card body & 4-row text slot heights so cards never scale with text
@@ -241,7 +240,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
           isBack ? 'tag-face-back' : ''
         } ${visible ? 'pointer-events-auto' : 'pointer-events-none'}`}
       >
-        {/* Compact Twine Loop */}
+        {/* Linen Twine Loop */}
         <div className="pointer-events-none mx-auto -mb-2.5 z-10 flex flex-col items-center">
           <svg
             width="34"
@@ -249,7 +248,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
             viewBox="0 0 34 18"
             fill="none"
             aria-hidden="true"
-            className="text-[#9E856A] dark:text-[#8E775F]"
+            className="text-[#8E7354] dark:text-[#9A8062]"
           >
             <path
               d="M17 17 C12 9, 10 2, 17 1.5 C24 2, 22 9, 17 17"
@@ -260,7 +259,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
           </svg>
         </div>
 
-        {/* Compact Top Chamfered Gift Tag Shoulders */}
+        {/* Chamfered Tag Shoulders with Brass Eyelet */}
         <div className="relative flex w-full items-stretch h-[22px] shrink-0">
           <svg
             width="22"
@@ -285,7 +284,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
           >
             <span
               aria-hidden="true"
-              className={`mt-2 h-3.5 w-3.5 rounded-full border-2 ${paperColors.eyeletRingClass} bg-[#F6F3EE] dark:bg-[#141210] shadow-inner`}
+              className={`mt-2 h-3.5 w-3.5 rounded-full border-2 ${paperColors.eyeletRingClass} bg-[#F5EFE4] dark:bg-[#16120F] shadow-inner`}
             />
           </div>
 
@@ -308,37 +307,64 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
           </svg>
         </div>
 
-        {/* Fixed-Dimension Gift Tag Body */}
+        {/* Fixed-Dimension Stationery Body */}
         <div
           className={`flex flex-col justify-between border-x border-b rounded-b-2xl px-6 sm:px-8 pb-3 pt-2.5 ${bodyFixedHeight} ${paperColors.bgClass} ${paperColors.borderClass} ${paperColors.grainClass}`}
         >
-          {/* Perspective Header (Fixed 1-line height) */}
+          {/* Classic Editorial Perspective Header */}
           <div
             className={`flex h-5 shrink-0 items-center justify-center gap-1.5 text-xs ${paperColors.mutedClass}`}
           >
             <svg
-              width="12"
-              height="11"
+              width="10"
+              height="9"
               viewBox="0 0 24 22"
               aria-hidden="true"
-              className={`opacity-70 shrink-0 ${paperColors.heartTintClass}`}
+              className={`opacity-80 shrink-0 ${paperColors.heartTintClass}`}
               fill="currentColor"
             >
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
-            <span className="font-medium truncate max-w-[340px]">
+            <span className="font-handwriting text-[15px] truncate max-w-[340px]">
               {perspectiveLabel}
             </span>
           </div>
 
-          {/* Fixed 4-Row Text Container */}
+          {/* Fixed 4-Row Ruled Pen-on-Paper Container (Tappable to flip when 2-sided) */}
           <div
             ref={!isBack ? measureBoxRef : undefined}
-            className={`relative flex items-center justify-center w-full ${textSlotFixedHeight} ${
+            role={split.needsFlip ? 'button' : undefined}
+            tabIndex={split.needsFlip && visible ? 0 : undefined}
+            aria-label={
+              split.needsFlip
+                ? isBack
+                  ? 'Tap to flip back to front side'
+                  : 'Tap to flip to back side of note'
+                : undefined
+            }
+            onClick={
+              split.needsFlip
+                ? () => setIsFlipped((prev) => !prev)
+                : undefined
+            }
+            onKeyDown={
+              split.needsFlip
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsFlipped((prev) => !prev);
+                    }
+                  }
+                : undefined
+            }
+            className={`relative flex items-center justify-center w-full ruled-stationery-light rounded-lg ${textSlotFixedHeight} ${
               isBack ? 'overflow-y-auto' : 'overflow-hidden'
+            } ${
+              split.needsFlip
+                ? 'cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-[#A65E22] dark:focus-visible:outline-[#E29A50]'
+                : ''
             }`}
           >
-            {/* Off-screen measurement node matching exact front slot width & font */}
             {!isBack && (
               <p
                 ref={measurerRef}
@@ -358,19 +384,19 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
             )}
           </div>
 
-          {/* Fixed Bottom Section: Flip Slot + Single-line Tags + Actions */}
+          {/* Fixed Bottom Section: Flip Icon + Tags + Icon Actions */}
           <div className="shrink-0 space-y-1">
             <div className="flex h-8 items-center justify-center">
               {split.needsFlip && (
                 <button
                   type="button"
                   onClick={() => setIsFlipped((prev) => !prev)}
-                  className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-medium transition ${paperColors.flipBtnClass}`}
+                  aria-label={isBack ? 'Show front side' : 'Flip tag to read more'}
+                  title={isBack ? 'Front (2/2)' : 'Flip (1/2)'}
+                  className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-mono-tabular transition ${paperColors.flipBtnClass}`}
                 >
                   <RotateCw className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    {isBack ? 'Flip to front · 2/2' : 'Turn tag over · 1/2'}
-                  </span>
+                  <span>{isBack ? '2/2' : '1/2'}</span>
                 </button>
               )}
             </div>
@@ -386,7 +412,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
                       <button
                         type="button"
                         onClick={() => onTagClick(tag)}
-                        className="hover:underline focus-visible:outline-2 focus-visible:outline-[#3E5C4E] rounded px-0.5 transition-colors truncate max-w-[90px]"
+                        className="hover:underline focus-visible:outline-2 focus-visible:outline-[#A65E22] rounded px-0.5 transition-colors truncate max-w-[90px]"
                       >
                         #{tag}
                       </button>
@@ -401,29 +427,37 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
               </div>
 
               <div className="flex h-9 items-center justify-between gap-2">
-                <span className={`text-[11px] font-mono-tabular ${paperColors.mutedClass}`}>
-                  {isKraft ? 'Kraft tag' : 'White tag'}
-                  {entry.syncStatus === 'pending' ? ' · Local' : ''}
-                </span>
+                <div className="flex items-center">
+                  {entry.syncStatus === 'pending' && (
+                    <span
+                      aria-label="Waiting to sync"
+                      title="Waiting to sync"
+                      className={`inline-flex items-center ${paperColors.mutedClass}`}
+                    >
+                      <Clock className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                </div>
 
-                {confirmingDelete ? (
-                  <div className="flex items-center gap-1">
-                    <span className={`text-xs mr-1 ${paperColors.mutedClass}`}>Delete?</span>
+                {!spotlight && confirmingDelete ? (
+                  <div className="flex items-center gap-1 -mr-2">
                     <button
                       type="button"
                       onClick={() => {
                         setConfirmingDelete(false);
                         onDelete(entry.id);
                       }}
-                      aria-label="Confirm delete entry"
-                      className="flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl text-[#9C4A3B] hover:bg-black/5 dark:text-[#DF8A79] dark:hover:bg-white/10"
+                      aria-label="Confirm delete"
+                      title="Confirm delete"
+                      className="flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl text-[#A65E22] hover:bg-black/5 dark:text-[#E29A50] dark:hover:bg-white/10"
                     >
                       <Check className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmingDelete(false)}
-                      aria-label="Cancel delete entry"
+                      aria-label="Cancel delete"
+                      title="Cancel"
                       className={`flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl hover:bg-black/5 dark:hover:bg-white/10 ${paperColors.mutedClass}`}
                     >
                       <X className="h-4 w-4" />
@@ -435,8 +469,9 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
                       type="button"
                       onClick={() => onToggleFavorite(entry)}
                       aria-label={
-                        entry.isFavorite ? 'Remove from cherished' : 'Mark as cherished'
+                        entry.isFavorite ? 'Remove favorite' : 'Mark favorite'
                       }
+                      title={entry.isFavorite ? 'Favorited' : 'Favorite'}
                       aria-pressed={entry.isFavorite}
                       className={`flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl transition hover:bg-black/5 dark:hover:bg-white/10 ${
                         entry.isFavorite
@@ -449,22 +484,28 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
                         fill={entry.isFavorite ? 'currentColor' : 'none'}
                       />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onEdit(entry)}
-                      aria-label="Edit gift tag"
-                      className={`flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl transition hover:bg-black/5 dark:hover:bg-white/10 ${paperColors.mutedClass}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingDelete(true)}
-                      aria-label="Delete gift tag"
-                      className={`flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl transition hover:bg-black/5 dark:hover:bg-white/10 ${paperColors.mutedClass}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!spotlight && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(entry)}
+                          aria-label="Edit tag"
+                          title="Edit"
+                          className={`flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl transition hover:bg-black/5 dark:hover:bg-white/10 ${paperColors.mutedClass}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingDelete(true)}
+                          aria-label="Delete tag"
+                          title="Delete"
+                          className={`flex min-h-[44px] min-w-[44px] -my-1 items-center justify-center rounded-xl transition hover:bg-black/5 dark:hover:bg-white/10 ${paperColors.mutedClass}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -477,7 +518,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
 
   return (
     <article
-      className={`tag-perspective group relative w-full drop-shadow-[0_6px_18px_rgba(34,31,27,0.07)] dark:drop-shadow-[0_12px_28px_rgba(0,0,0,0.45)] ${
+      className={`tag-perspective group relative w-full drop-shadow-[0_10px_24px_rgba(36,29,23,0.09)] dark:drop-shadow-[0_14px_30px_rgba(0,0,0,0.52)] ${
         spotlight ? 'max-w-[600px] mx-auto' : ''
       }`}
     >

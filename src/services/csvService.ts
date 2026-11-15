@@ -75,10 +75,7 @@ function normalizePerspective(val: string | undefined): Perspective {
   return 'from_me';
 }
 
-function normalizeStyle(val: string | undefined, perspective: Perspective): TagStyle {
-  const v = (val ?? '').trim().toLowerCase();
-  if (v === 'kraft' || v === 'brown' || v === 'brown kraft') return 'kraft';
-  if (v === 'white' || v === 'ivory' || v === 'cream') return 'white';
+function normalizeStyle(_val: string | undefined, perspective: Perspective): TagStyle {
   return perspective === 'from_her' ? 'kraft' : 'white';
 }
 
@@ -244,7 +241,7 @@ export function downloadSampleCsvTemplate(): void {
     '"You always make me a cup of tea before I even realize I need a break.",from_me,white,"kindness; mornings",2026-10-14,true',
     '"Thank you for staying calm and holding my hand when everything felt overwhelming.",from_her,kraft,"support; hard-days",2026-10-21,true',
     '"How you still laugh at my terrible puns while cooking dinner together.",from_me,white,"laughter; home",2026-11-02,false',
-    '"Leaving little handwritten gift tags inside my coat pocket before work trips.",from_her,kraft,"thoughtful; notes",2026-11-09,false',
+    '"Leaving little handwritten tags inside my coat pocket before work trips.",from_her,kraft,"thoughtful; notes",2026-11-09,false',
   ].join('\r\n');
   triggerFileDownload(`\uFEFF${sample}`, 'lest-we-forget-sample.csv', 'text/csv;charset=utf-8;');
 }

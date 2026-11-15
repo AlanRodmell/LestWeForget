@@ -1,52 +1,139 @@
-import React, { useMemo } from 'react';
-import { RefreshCw, Plus, Upload, Heart } from 'lucide-react';
-import type { AppPreferences, GratitudeEntry, Perspective } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getReflectLeadInPrompt,
+  type AppPreferences,
+  type GratitudeEntry,
+  type Perspective,
+} from '../types';
 import { GiftTagCard } from './GiftTagCard';
 
 interface ReflectViewProps {
   entries: GratitudeEntry[];
   currentSpotlight: GratitudeEntry | null;
   prefs: AppPreferences;
+  userEmail: string | null | undefined;
   perspectiveFilter: 'all' | Perspective;
   selectedTag: string | null;
   drawKey: number;
-  onPerspectiveChange: (next: 'all' | Perspective) => void;
-  onClearTag: () => void;
   onDrawRandom: () => void;
   onToggleFavorite: (entry: GratitudeEntry) => void;
   onEdit: (entry: GratitudeEntry) => void;
   onDelete: (id: string) => void;
   onTagClick: (tag: string) => void;
   onOpenNew: () => void;
-  onGoToImport: () => void;
 }
+
+type CardAnimPhase = 'first-enter' | 'flip-out' | 'flip-in' | 'idle';
+
+const FIRST_ENTER_TOTAL_MS = 900;
+const FLIP_OUT_MS = 380;
+const FLIP_IN_MS = 520;
+const SWIPE_THRESHOLD_PX = 48;
 
 export const ReflectView: React.FC<ReflectViewProps> = ({
   entries,
   currentSpotlight,
   prefs,
+  userEmail,
   perspectiveFilter,
   selectedTag,
   drawKey,
-  onPerspectiveChange,
-  onClearTag,
   onDrawRandom,
   onToggleFavorite,
   onEdit,
   onDelete,
   onTagClick,
   onOpenNew,
-  onGoToImport,
 }) => {
-  const counts = useMemo(() => {
-    let fromMe = 0;
-    let fromHer = 0;
-    for (const e of entries) {
-      if (e.perspective === 'from_her') fromHer += 1;
-      else fromMe += 1;
+  const [displayedEntry, setDisplayedEntry] = useState<GratitudeEntry | null>(currentSpotlight);
+  const [animPhase, setAnimPhase] = useState<CardAnimPhase>(
+    currentSpotlight ? 'first-enter' : 'idle'
+  );
+  const displayedEntryRef = useRef<GratitudeEntry | null>(currentSpotlight);
+  const prevDrawKeyRef = useRef(drawKey);
+  const timerRefs = useRef<number[]>([]);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearFlipTimers = () => {
+    for (const id of timerRefs.current) {
+      window.clearTimeout(id);
     }
-    return { total: entries.length, fromMe, fromHer };
-  }, [entries]);
+    timerRefs.current = [];
+  };
+
+  useEffect(() => {
+    if (currentSpotlight) {
+      const id = window.setTimeout(() => {
+        setAnimPhase((prev) => (prev === 'first-enter' ? 'idle' : prev));
+      }, FIRST_ENTER_TOTAL_MS);
+      timerRefs.current.push(id);
+    }
+    return () => clearFlipTimers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const currentDisplayed = displayedEntryRef.current;
+
+    if (!currentSpotlight) {
+      clearFlipTimers();
+      displayedEntryRef.current = null;
+      setDisplayedEntry(null);
+      setAnimPhase('idle');
+      prevDrawKeyRef.current = drawKey;
+      return;
+    }
+
+    // First reveal from starting screen: fade in lead-in text first, then card
+    if (!currentDisplayed) {
+      clearFlipTimers();
+      displayedEntryRef.current = currentSpotlight;
+      setDisplayedEntry(currentSpotlight);
+      setAnimPhase('first-enter');
+      prevDrawKeyRef.current = drawKey;
+      const settleId = window.setTimeout(() => {
+        setAnimPhase('idle');
+      }, FIRST_ENTER_TOTAL_MS);
+      timerRefs.current.push(settleId);
+      return;
+    }
+
+    const drawTriggered = drawKey !== prevDrawKeyRef.current;
+    const entryChanged = currentSpotlight.id !== currentDisplayed.id;
+
+    // In-place update (e.g., favorited or edited same card): update silently without flipping
+    if (!drawTriggered && !entryChanged) {
+      displayedEntryRef.current = currentSpotlight;
+      setDisplayedEntry(currentSpotlight);
+      return;
+    }
+
+    prevDrawKeyRef.current = drawKey;
+    clearFlipTimers();
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) {
+      displayedEntryRef.current = currentSpotlight;
+      setDisplayedEntry(currentSpotlight);
+      setAnimPhase('idle');
+      return;
+    }
+
+    setAnimPhase('flip-out');
+    const outId = window.setTimeout(() => {
+      displayedEntryRef.current = currentSpotlight;
+      setDisplayedEntry(currentSpotlight);
+      setAnimPhase('flip-in');
+      const inId = window.setTimeout(() => {
+        setAnimPhase('idle');
+      }, FLIP_IN_MS);
+      timerRefs.current.push(inId);
+    }, FLIP_OUT_MS);
+    timerRefs.current.push(outId);
+  }, [currentSpotlight, drawKey]);
 
   const matchingCount = useMemo(() => {
     return entries.filter((e) => {
@@ -58,158 +145,126 @@ export const ReflectView: React.FC<ReflectViewProps> = ({
     }).length;
   }, [entries, perspectiveFilter, selectedTag]);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length === 0) return;
+    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+    const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+
+    if (
+      Math.abs(dx) >= SWIPE_THRESHOLD_PX &&
+      Math.abs(dx) > Math.abs(dy) * 1.35 &&
+      matchingCount > 1 &&
+      animPhase !== 'flip-out'
+    ) {
+      onDrawRandom();
+    }
+  };
+
   if (entries.length === 0) {
     return (
-      <section className="mx-auto max-w-xl py-10 sm:py-16 text-center px-2">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#DDD4C7] bg-[#FAF8F4] text-[#9C4A3B] dark:border-[#3A342E] dark:bg-[#231F1B] dark:text-[#DF8A79]">
-          <Heart className="h-7 w-7" />
-        </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#221F1B] dark:text-[#F2ECE4] text-balance">
-          A quiet box for the things you never want to forget
-        </h1>
-        <p className="mt-4 text-base leading-relaxed text-[#6B6257] dark:text-[#AEA498]">
-          Record moments you are grateful for about her, and the notes she shared about you.
-          When days feel heavy, draw a tag at random to remember why you are thankful.
-        </p>
-
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={onOpenNew}
-            className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#3E5C4E] px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#324B3F] dark:bg-[#4E7462] dark:hover:bg-[#5E8874]"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Write Your First Gift Tag</span>
-          </button>
-          <button
-            type="button"
-            onClick={onGoToImport}
-            className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-[#DDD4C7] bg-[#FAF8F4] px-6 py-3 text-sm font-medium text-[#221F1B] transition hover:bg-[#EFE9E0] dark:border-[#3A342E] dark:bg-[#231F1B] dark:text-[#F2ECE4] dark:hover:bg-[#2E2924]"
-          >
-            <Upload className="h-4 w-4" />
-            <span>Import from CSV</span>
-          </button>
-        </div>
+      <section className="mx-auto flex min-h-[70dvh] max-w-xl flex-col items-center justify-center px-4 text-center">
+        <button
+          type="button"
+          onClick={onOpenNew}
+          className="group relative inline-flex min-h-[64px] flex-col items-center justify-center border-0 bg-transparent px-8 py-4 shadow-none transition-transform duration-300 ease-out hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#A65E22] dark:focus-visible:outline-[#E29A50] rounded-lg cursor-pointer"
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-x-10 -inset-y-5 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,244,224,0.75)_0%,rgba(245,239,228,0)_72%)] dark:bg-[radial-gradient(ellipse_at_center,rgba(22,18,15,0.78)_0%,rgba(22,18,15,0)_72%)]"
+          />
+          <span className="relative font-handwriting text-3xl sm:text-4xl md:text-[2.6rem] font-normal text-[#382314] transition-colors duration-300 group-hover:text-[#A65E22] dark:text-[#F4E6D2] dark:group-hover:text-[#E8A864]">
+            Help Me Be Grateful
+          </span>
+          <span
+            aria-hidden="true"
+            className="relative mt-2 h-px w-20 bg-[#B37336]/60 transition-all duration-300 ease-out group-hover:w-36 group-hover:bg-[#A65E22]/90 dark:bg-[#D48C46]/55 dark:group-hover:bg-[#E8A864]/90"
+          />
+        </button>
       </section>
     );
   }
 
-  return (
-    <section className="mx-auto max-w-3xl space-y-5 pb-6">
-      {/* Perspective Segmented Control */}
-      <div className="flex flex-col items-center gap-3">
-        <div
-          role="tablist"
-          aria-label="Filter gratitude perspective"
-          className="inline-flex flex-wrap items-center justify-center gap-1 rounded-xl border border-[#DDD4C7] bg-[#EFE9E0]/70 p-1 dark:border-[#342E28] dark:bg-[#1E1B18]"
+  if (!displayedEntry) {
+    return (
+      <section className="mx-auto flex min-h-[70dvh] max-w-xl flex-col items-center justify-center px-4 text-center">
+        <button
+          type="button"
+          onClick={matchingCount === 0 ? onOpenNew : onDrawRandom}
+          className="group relative inline-flex min-h-[64px] flex-col items-center justify-center border-0 bg-transparent px-8 py-4 shadow-none transition-transform duration-300 ease-out hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#A65E22] dark:focus-visible:outline-[#E29A50] rounded-lg cursor-pointer"
         >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={perspectiveFilter === 'all'}
-            onClick={() => onPerspectiveChange('all')}
-            className={`min-h-[40px] rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-medium transition whitespace-nowrap shrink-0 ${
-              perspectiveFilter === 'all'
-                ? 'bg-[#FAF8F4] text-[#221F1B] shadow-xs dark:bg-[#2E2924] dark:text-[#F2ECE4]'
-                : 'text-[#6B6257] hover:text-[#221F1B] dark:text-[#AEA498] dark:hover:text-[#F2ECE4]'
-            }`}
-          >
-            All ({counts.total})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={perspectiveFilter === 'from_me'}
-            onClick={() => onPerspectiveChange('from_me')}
-            className={`min-h-[40px] rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-medium transition whitespace-nowrap shrink-0 ${
-              perspectiveFilter === 'from_me'
-                ? 'bg-[#FAF8F4] text-[#221F1B] shadow-xs dark:bg-[#2E2924] dark:text-[#F2ECE4]'
-                : 'text-[#6B6257] hover:text-[#221F1B] dark:text-[#AEA498] dark:hover:text-[#F2ECE4]'
-            }`}
-          >
-            From Me ({counts.fromMe})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={perspectiveFilter === 'from_her'}
-            onClick={() => onPerspectiveChange('from_her')}
-            className={`min-h-[40px] rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-medium transition whitespace-nowrap shrink-0 ${
-              perspectiveFilter === 'from_her'
-                ? 'bg-[#FAF8F4] text-[#221F1B] shadow-xs dark:bg-[#2E2924] dark:text-[#F2ECE4]'
-                : 'text-[#6B6257] hover:text-[#221F1B] dark:text-[#AEA498] dark:hover:text-[#F2ECE4]'
-            }`}
-          >
-            From Her ({counts.fromHer})
-          </button>
-        </div>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-x-10 -inset-y-5 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,244,224,0.75)_0%,rgba(245,239,228,0)_72%)] dark:bg-[radial-gradient(ellipse_at_center,rgba(22,18,15,0.78)_0%,rgba(22,18,15,0)_72%)]"
+          />
+          <span className="relative font-handwriting text-3xl sm:text-4xl md:text-[2.6rem] font-normal text-[#382314] transition-colors duration-300 group-hover:text-[#A65E22] dark:text-[#F4E6D2] dark:group-hover:text-[#E8A864]">
+            Help Me Be Grateful
+          </span>
+          <span
+            aria-hidden="true"
+            className="relative mt-2 h-px w-20 bg-[#B37336]/60 transition-all duration-300 ease-out group-hover:w-36 group-hover:bg-[#A65E22]/90 dark:bg-[#D48C46]/55 dark:group-hover:bg-[#E8A864]/90"
+          />
+        </button>
+      </section>
+    );
+  }
 
-        {selectedTag && (
-          <div className="flex items-center gap-2 text-xs text-[#6B6257] dark:text-[#AEA498]">
-            <span>Filtering by #{selectedTag}</span>
-            <span aria-hidden="true">·</span>
-            <button
-              type="button"
-              onClick={onClearTag}
-              className="font-medium text-[#3E5C4E] hover:underline dark:text-[#86B39D]"
-            >
-              Clear tag
-            </button>
-          </div>
-        )}
+  const cardAnimClass =
+    animPhase === 'first-enter'
+      ? 'animate-first-card will-change-transform'
+      : animPhase === 'flip-out'
+      ? 'animate-card-flip-out will-change-transform pointer-events-none'
+      : animPhase === 'flip-in'
+      ? 'animate-card-flip-in will-change-transform'
+      : '';
+
+  const leadInText = getReflectLeadInPrompt(userEmail, displayedEntry.perspective);
+
+  return (
+    <section className="mx-auto flex min-h-[70dvh] max-w-3xl flex-col items-center justify-center gap-5 py-4">
+      <p className="animate-lead-in text-center font-handwriting text-[28px] sm:text-[34px] leading-snug text-[#4E331E] dark:text-[#E6C79C] transition-opacity duration-300">
+        {leadInText}
+      </p>
+
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className={`w-full touch-pan-y ${cardAnimClass}`}
+      >
+        <GiftTagCard
+          entry={displayedEntry}
+          prefs={prefs}
+          spotlight
+          onToggleFavorite={onToggleFavorite}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onTagClick={onTagClick}
+        />
       </div>
 
-      {/* Spotlight Gift Tag */}
-      {currentSpotlight ? (
-        <div
-          key={`${currentSpotlight.id}-${drawKey}`}
-          className="animate-[fadeSlide_180ms_cubic-bezier(0.16,1,0.3,1)]"
-        >
-          <GiftTagCard
-            entry={currentSpotlight}
-            prefs={prefs}
-            spotlight
-            onToggleFavorite={onToggleFavorite}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onTagClick={onTagClick}
-          />
-        </div>
-      ) : (
-        <div className="mx-auto max-w-md rounded-2xl border border-[#DDD4C7] bg-[#FAF8F4] p-8 text-center dark:border-[#3A342E] dark:bg-[#1E1B18]">
-          <p className="font-display text-lg text-[#221F1B] dark:text-[#F2ECE4]">
-            No gift tags match this filter yet
-          </p>
-          <p className="mt-2 text-sm text-[#6B6257] dark:text-[#AEA498]">
-            Try switching perspectives or clearing the tag filter.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              onPerspectiveChange('all');
-              onClearTag();
-            }}
-            className="mt-5 min-h-[44px] rounded-xl border border-[#DDD4C7] px-4 py-2 text-sm font-medium text-[#221F1B] hover:bg-[#EFE9E0] dark:border-[#3A342E] dark:text-[#F2ECE4] dark:hover:bg-[#2E2924]"
-          >
-            Show all entries
-          </button>
-        </div>
-      )}
-
-      {/* Primary Focal CTA: Be Grateful / Help me Be Grateful */}
-      <div className="flex flex-col items-center gap-2.5 pt-1">
+      <div className="animate-continue-in flex justify-center pt-1">
         <button
           type="button"
           onClick={onDrawRandom}
-          disabled={matchingCount === 0}
-          className="inline-flex min-h-[52px] w-full max-w-xs items-center justify-center gap-2.5 rounded-2xl bg-[#3E5C4E] px-6 py-3.5 text-base font-medium text-white shadow-md transition active:scale-[0.98] hover:bg-[#324B3F] disabled:opacity-45 dark:bg-[#4E7462] dark:hover:bg-[#5E8874]"
+          disabled={matchingCount === 0 || animPhase === 'flip-out'}
+          className="group relative inline-flex min-h-[48px] flex-col items-center justify-center border-0 bg-transparent px-6 py-2 shadow-none transition-transform duration-200 ease-out hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#A65E22] dark:focus-visible:outline-[#E29A50] rounded-lg cursor-pointer"
         >
-          <RefreshCw className="h-4 w-4 shrink-0" />
-          <span>Help Me Be Grateful</span>
+          <span className="font-handwriting text-2xl sm:text-[26px] font-normal text-[#382314] transition-colors group-hover:text-[#A65E22] dark:text-[#F4E6D2] dark:group-hover:text-[#E8A864]">
+            Continue
+          </span>
+          <span
+            aria-hidden="true"
+            className="mt-1 h-px w-12 bg-[#B37336]/55 transition-all duration-300 ease-out group-hover:w-20 group-hover:bg-[#A65E22]/85 dark:bg-[#D48C46]/55 dark:group-hover:bg-[#E8A864]/85"
+          />
         </button>
-        <p className="text-xs text-[#6B6257] dark:text-[#AEA498] font-mono-tabular">
-          Drawing at random from {matchingCount} {matchingCount === 1 ? 'tag' : 'tags'}
-        </p>
       </div>
     </section>
   );

@@ -18,15 +18,33 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return result;
 }
 
+function secureRandomIndex(length: number): number {
+  if (length <= 1) return 0;
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    return array[0] % length;
+  }
+  return Math.floor(Math.random() * length);
+}
+
 export function pickRandomEntry(
   entries: GratitudeEntry[],
-  excludeId?: string | null
+  excludeId?: string | null,
+  recentDrawIds: string[] = []
 ): GratitudeEntry | null {
   if (entries.length === 0) return null;
   if (entries.length === 1) return entries[0];
-  const pool = excludeId ? entries.filter((e) => e.id !== excludeId) : entries;
-  const source = pool.length > 0 ? pool : entries;
-  const index = Math.floor(Math.random() * source.length);
+
+  const nonCurrentPool = excludeId ? entries.filter((e) => e.id !== excludeId) : entries;
+  const candidates = nonCurrentPool.length > 0 ? nonCurrentPool : entries;
+
+  // Exclude cards already drawn in the current cycle so every card is seen before repeating
+  const recentSet = new Set(recentDrawIds);
+  const unseenPool = candidates.filter((e) => !recentSet.has(e.id));
+
+  const source = unseenPool.length > 0 ? unseenPool : candidates;
+  const index = secureRandomIndex(source.length);
   return source[index];
 }
 

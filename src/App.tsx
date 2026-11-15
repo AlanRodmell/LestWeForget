@@ -6,13 +6,16 @@ import {
   type User,
 } from 'firebase/auth';
 import {
-  BookOpen,
+  Check,
   Cloud,
+  LayoutGrid,
+  ListFilter,
   Moon,
   Plus,
-  Settings,
+  SlidersHorizontal,
   Sparkles,
   Sun,
+  X,
 } from 'lucide-react';
 import { auth, googleProvider } from './firebase';
 import {
@@ -38,12 +41,15 @@ import {
 } from './services/idbStore';
 import {
   ensureSharedVault,
-  getMemberLastSeenMs,
+  getLocalRecentDrawIds,
+  getMemberReadState,
   pushAllPendingEntries,
   pushEntryToCloud,
+  saveLocalRecentDrawIds,
   subscribeToCloudEntries,
   syncPreferencesToCloud,
   updateMemberLastSeenMs,
+  updateMemberRecentDraws,
 } from './services/syncService';
 import {
   pickRandomEntry,
@@ -59,6 +65,7 @@ import { NewPartnerTagsModal } from './components/NewPartnerTagsModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { AuthGate } from './components/AuthGate';
+import { StationeryBackdrop } from './components/StationeryBackdrop';
 
 type ActiveTab = 'reflect' | 'collection' | 'backup';
 
@@ -72,7 +79,7 @@ export default function App() {
   const [prefs, setPrefs] = useState<AppPreferences>(DEFAULT_PREFERENCES);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Reflect spotlight state
+  // Reflect spotlight starts empty so initial screen shows only Help Me Be Grateful
   const [perspectiveFilter, setPerspectiveFilter] = useState<'all' | Perspective>('all');
   const [spotlightTagFilter, setSpotlightTagFilter] = useState<string | null>(null);
   const [spotlightId, setSpotlightId] = useState<string | null>(null);
@@ -85,8 +92,9 @@ export default function App() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<GratitudeEntry | null>(null);
 
-  // Partner new-tags notification modal state
+  // Partner new-tags notification modal & cycle-aware draw history state
   const [lastSeenMs, setLastSeenMs] = useState<number | null>(null);
+  const [recentDrawIds, setRecentDrawIds] = useState<string[]>([]);
   const [newTagsModalOpen, setNewTagsModalOpen] = useState(false);
   const [dismissedModalForSession, setDismissedModalForSession] = useState(false);
   const sessionCreatedIdsRef = useRef<Set<string>>(new Set());
@@ -98,6 +106,26 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!filterMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) {
+        setFilterMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFilterMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [filterMenuOpen]);
 
   // Apply dark mode class whenever theme preference changes
   useEffect(() => {
@@ -120,10 +148,6 @@ export default function App() {
         const loadedEntries = await getActiveEntries();
         if (!active) return;
         setEntries(loadedEntries);
-        if (loadedEntries.length > 0) {
-          const picked = pickRandomEntry(loadedEntries);
-          setSpotlightId(picked?.id ?? null);
-        }
       } else {
         setEntries([]);
       }
@@ -147,21 +171,31 @@ export default function App() {
         const blocked = currentUser.email ?? 'this account';
         setDeniedEmail(blocked);
         setUser(null);
+        setPerspectiveFilter('all');
         setLastSeenMs(null);
+        setRecentDrawIds([]);
         setNewTagsModalOpen(false);
         setDismissedModalForSession(false);
+        setSpotlightId(null);
         sessionCreatedIdsRef.current.clear();
         setAuthReady(true);
         await signOut(auth);
         return;
       }
 
+      const defaultPerspectiveFilter: 'all' | Perspective = currentUser
+        ? getIncomingPerspectiveForEmail(currentUser.email) ?? 'all'
+        : 'all';
+
       setUser(currentUser);
       setAuthReady(true);
       setSyncError(null);
+      setPerspectiveFilter(defaultPerspectiveFilter);
       setLastSeenMs(null);
+      setRecentDrawIds(currentUser ? getLocalRecentDrawIds(currentUser.uid) : []);
       setNewTagsModalOpen(false);
       setDismissedModalForSession(false);
+      setSpotlightId(null);
       sessionCreatedIdsRef.current.clear();
 
       if (!currentUser) return;
@@ -176,8 +210,9 @@ export default function App() {
             const saved = await savePreferences(mergedPrefs);
             setPrefs(saved);
           }
-          const seen = await getMemberLastSeenMs(currentUser.uid);
-          setLastSeenMs(seen);
+          const memberState = await getMemberReadState(currentUser.uid);
+          setLastSeenMs(memberState.lastSeenMs);
+          setRecentDrawIds(memberState.recentDrawIds);
           await pushAllPendingEntries(currentUser.uid);
         } else {
           let localSeen = 0;
@@ -191,6 +226,7 @@ export default function App() {
             // Ignore storage access errors
           }
           setLastSeenMs(localSeen);
+          setRecentDrawIds(getLocalRecentDrawIds(currentUser.uid));
           setIsSyncing(false);
         }
 
@@ -301,9 +337,8 @@ export default function App() {
   }, [entries, perspectiveFilter, spotlightTagFilter]);
 
   const currentSpotlight = useMemo(() => {
-    if (filteredPool.length === 0) return null;
-    const found = filteredPool.find((e) => e.id === spotlightId);
-    return found ?? filteredPool[0];
+    if (!spotlightId || filteredPool.length === 0) return null;
+    return filteredPool.find((e) => e.id === spotlightId) ?? null;
   }, [filteredPool, spotlightId]);
 
   const pendingSyncCount = useMemo(
@@ -367,13 +402,63 @@ export default function App() {
     }
   };
 
+  const recordDrawnEntry = useCallback(
+    (pickedId: string, pool: GratitudeEntry[]) => {
+      setRecentDrawIds((prev) => {
+        let next = [pickedId, ...prev.filter((id) => id !== pickedId)].slice(0, 50);
+        // Once every card in the active pool has been seen in this cycle, reset the pool's cycle
+        // history (keeping only the currently displayed card) so the next pass is a fresh shuffle
+        if (pool.length > 1 && pool.every((e) => next.includes(e.id))) {
+          const poolIds = new Set(pool.map((e) => e.id));
+          next = [pickedId, ...next.filter((id) => !poolIds.has(id))].slice(0, 50);
+        }
+        if (user && isAuthorizedUser(user)) {
+          saveLocalRecentDrawIds(user.uid, next);
+          if (navigator.onLine) {
+            void updateMemberRecentDraws(user.uid, next).catch(() => {
+              // Non-blocking background draw history persistence
+            });
+          }
+        }
+        return next;
+      });
+    },
+    [user]
+  );
+
   const handleDrawRandom = useCallback(() => {
-    const picked = pickRandomEntry(filteredPool, currentSpotlight?.id ?? null);
+    const picked = pickRandomEntry(filteredPool, currentSpotlight?.id ?? null, recentDrawIds);
     if (picked) {
       setSpotlightId(picked.id);
       setDrawKey((k) => k + 1);
+      recordDrawnEntry(picked.id, filteredPool);
     }
-  }, [filteredPool, currentSpotlight]);
+  }, [filteredPool, currentSpotlight, recentDrawIds, recordDrawnEntry]);
+
+  const handlePerspectiveChange = useCallback(
+    (next: 'all' | Perspective) => {
+      setPerspectiveFilter(next);
+      if (spotlightId) {
+        const nextPool = entries.filter((e) => {
+          if (next !== 'all' && e.perspective !== next) return false;
+          if (
+            spotlightTagFilter &&
+            !e.tags.some((t) => t.toLowerCase() === spotlightTagFilter.toLowerCase())
+          ) {
+            return false;
+          }
+          return true;
+        });
+        const picked = pickRandomEntry(nextPool, spotlightId, recentDrawIds);
+        setSpotlightId(picked?.id ?? null);
+        setDrawKey((k) => k + 1);
+        if (picked) {
+          recordDrawnEntry(picked.id, nextPool);
+        }
+      }
+    },
+    [entries, spotlightId, spotlightTagFilter, recentDrawIds, recordDrawnEntry]
+  );
 
   const refreshLocalEntries = async () => {
     const fresh = await getActiveEntries();
@@ -492,9 +577,6 @@ export default function App() {
 
     await upsertEntriesBulk(toInsert);
     await refreshLocalEntries();
-    if (!spotlightId && toInsert.length > 0) {
-      setSpotlightId(toInsert[0].id);
-    }
 
     if (navigator.onLine) {
       setIsSyncing(true);
@@ -592,6 +674,7 @@ export default function App() {
   const handleSignOut = async () => {
     await signOut(auth);
     setEntries([]);
+    setSpotlightId(null);
     setSyncError(null);
   };
 
@@ -618,8 +701,8 @@ export default function App() {
 
   if (!authReady) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-[#F6F3EE] text-[#6B6257] dark:bg-[#141210] dark:text-[#AEA498]">
-        <span className="font-display text-lg">Lest We Forget...</span>
+      <div className="min-h-dvh warm-desk-light flex items-center justify-center bg-[#F5EFE4] text-[#6E6153] dark:bg-[#16120F] dark:text-[#B5A693]">
+        <span className="font-display text-2xl font-medium">Lest We Forget</span>
       </div>
     );
   }
@@ -637,98 +720,194 @@ export default function App() {
     );
   }
 
+  const syncAriaLabel = isSyncing
+    ? 'Syncing vault'
+    : pendingSyncCount > 0
+    ? `${pendingSyncCount} waiting to sync`
+    : `Synced (${user.email})`;
+
+  const isStartingScreen = activeTab === 'reflect' && !currentSpotlight;
+
+  const isFilterActive = perspectiveFilter !== 'all' || spotlightTagFilter !== null;
+
   return (
-    <div className="min-h-dvh flex flex-col bg-[#F6F3EE] text-[#221F1B] dark:bg-[#141210] dark:text-[#F2ECE4] transition-colors">
-      {/* Sticky Top Bar (Strict 3-zone contract, 56px height) */}
-      <header className="sticky top-0 z-30 h-14 border-b border-[#E3DBD0] bg-[#F6F3EE]/90 backdrop-blur-md dark:border-[#2A2520] dark:bg-[#141210]/90">
-        <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-8 px-4 sm:px-6">
-          {/* Zone 1: Single-element Brand Wordmark */}
+    <div className="relative min-h-dvh flex flex-col bg-[#F5EFE4] text-[#241D17] dark:bg-[#16120F] dark:text-[#EFE6D8] transition-colors">
+      <StationeryBackdrop variant={isStartingScreen ? 'prominent' : 'subtle'} />
+
+      {/* Minimalist Sticky Top Bar (All controls & filters housed cleanly outside <main>) */}
+      <header className="sticky top-0 z-30 h-14 border-b border-[#D7CBB8]/75 bg-[#F5EFE4]/78 backdrop-blur-md dark:border-[#30271F]/75 dark:bg-[#16120F]/78">
+        <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 sm:gap-8 px-4 sm:px-6">
+          {/* Zone 1: Engraved Serif Wordmark */}
           <button
             type="button"
-            onClick={() => setActiveTab('reflect')}
-            className="font-display text-lg font-medium tracking-tight text-[#221F1B] dark:text-[#F2ECE4] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-[#3E5C4E] rounded"
+            onClick={() => {
+              setSpotlightId(null);
+              setActiveTab('reflect');
+              setFilterMenuOpen(false);
+            }}
+            className="font-display text-xl sm:text-2xl font-semibold tracking-tight text-[#241D17] dark:text-[#EFE6D8] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-[#A65E22] rounded"
           >
             Lest We Forget
           </button>
 
-          {/* Zone 2: Clean Single-Line Nav Links (Desktop) */}
+          {/* Zone 2: Minimalist Icon Navigation (Desktop) */}
           <nav
             aria-label="Primary navigation"
-            className="hidden md:flex items-center gap-6 text-sm font-medium text-[#6B6257] dark:text-[#AEA498]"
+            className="hidden md:flex items-center gap-4 text-[#6E6153] dark:text-[#B5A693]"
           >
             <button
               type="button"
               onClick={() => setActiveTab('reflect')}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 hover:text-[#221F1B] dark:hover:text-[#F2ECE4] ${
+              aria-label="Reflect"
+              title="Reflect"
+              className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl transition hover:text-[#241D17] dark:hover:text-[#EFE6D8] ${
                 activeTab === 'reflect'
-                  ? 'text-[#221F1B] underline decoration-[#3E5C4E] decoration-2 underline-offset-8 dark:text-[#F2ECE4] dark:decoration-[#78A58F]'
+                  ? 'text-[#A65E22] bg-[#A65E22]/10 dark:text-[#E29A50] dark:bg-[#E29A50]/15'
                   : ''
               }`}
             >
-              Reflect
+              <Sparkles className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => {
                 setCollectionTagJump(null);
                 setActiveTab('collection');
+                setFilterMenuOpen(false);
               }}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 hover:text-[#221F1B] dark:hover:text-[#F2ECE4] ${
+              aria-label="All tags"
+              title="All tags"
+              className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl transition hover:text-[#241D17] dark:hover:text-[#EFE6D8] ${
                 activeTab === 'collection'
-                  ? 'text-[#221F1B] underline decoration-[#3E5C4E] decoration-2 underline-offset-8 dark:text-[#F2ECE4] dark:decoration-[#78A58F]'
+                  ? 'text-[#A65E22] bg-[#A65E22]/10 dark:text-[#E29A50] dark:bg-[#E29A50]/15'
                   : ''
               }`}
             >
-              All Tags
+              <LayoutGrid className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('backup')}
-              className={`py-1 transition-colors whitespace-nowrap shrink-0 hover:text-[#221F1B] dark:hover:text-[#F2ECE4] ${
-                activeTab === 'backup'
-                  ? 'text-[#221F1B] underline decoration-[#3E5C4E] decoration-2 underline-offset-8 dark:text-[#F2ECE4] dark:decoration-[#78A58F]'
-                  : ''
-              }`}
-            >
-              Backup & Reminders
-            </button>
-          </nav>
-
-          {/* Zone 3: Single Primary Action */}
-          <div className="flex items-center shrink-0">
             <button
               type="button"
               onClick={() => {
-                setEditingEntry(null);
-                setEditorOpen(true);
+                setActiveTab('backup');
+                setFilterMenuOpen(false);
               }}
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-[#3E5C4E] px-4 py-2 text-xs sm:text-sm font-medium text-white shadow-xs transition hover:bg-[#324B3F] dark:bg-[#4E7462] dark:hover:bg-[#5E8874] whitespace-nowrap shrink-0"
+              aria-label="Settings and backup"
+              title="Settings and backup"
+              className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl transition hover:text-[#241D17] dark:hover:text-[#EFE6D8] ${
+                activeTab === 'backup'
+                  ? 'text-[#A65E22] bg-[#A65E22]/10 dark:text-[#E29A50] dark:bg-[#E29A50]/15'
+                  : ''
+              }`}
             >
-              <Plus className="h-4 w-4 shrink-0" />
-              <span>Write Tag</span>
+              <SlidersHorizontal className="h-4 w-4" />
             </button>
-          </div>
-        </div>
-      </header>
+          </nav>
 
-      {/* Main Content */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6 pt-5 pb-24 md:pb-12">
-        {/* Compact Workspace Utility Strip */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#6B6257] dark:text-[#AEA498]">
+          {/* Zone 3: Header Utility Controls & Write Action */}
+          <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+            {activeTab === 'reflect' && (
+              <div ref={filterMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setFilterMenuOpen((prev) => !prev)}
+                  aria-expanded={filterMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label="Filter note set"
+                  title="Filter note set"
+                  className={`flex min-h-[44px] min-w-[40px] sm:min-w-[44px] items-center justify-center rounded-xl transition hover:bg-[#EAE1D3]/80 dark:hover:bg-[#201A15] ${
+                    isFilterActive
+                      ? 'text-[#A65E22] dark:text-[#E29A50]'
+                      : 'text-[#6E6153] dark:text-[#B5A693]'
+                  }`}
+                >
+                  <ListFilter className="h-4 w-4" />
+                </button>
+
+                {filterMenuOpen && (
+                  <div
+                    role="menu"
+                    aria-label="Note set filter"
+                    className="absolute right-0 mt-2 w-48 rounded-2xl border border-[#D7CBB8] bg-[#FBF8F1] p-1.5 shadow-[0_14px_34px_rgba(36,29,23,0.14)] dark:border-[#3B3026] dark:bg-[#201A15] dark:shadow-[0_16px_38px_rgba(0,0,0,0.55)] z-50"
+                  >
+                    {(
+                      [
+                        { id: 'all', label: 'All', count: entries.length },
+                        {
+                          id: 'from_me',
+                          label: prefs.meLabel,
+                          count: entries.filter((e) => e.perspective === 'from_me').length,
+                        },
+                        {
+                          id: 'from_her',
+                          label: prefs.herLabel,
+                          count: entries.filter((e) => e.perspective === 'from_her').length,
+                        },
+                      ] as const
+                    ).map((option) => {
+                      const active = perspectiveFilter === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => {
+                            handlePerspectiveChange(option.id);
+                            setFilterMenuOpen(false);
+                          }}
+                          className={`flex min-h-[40px] w-full items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-left text-sm transition ${
+                            active
+                              ? 'bg-[#EAE1D3] font-medium text-[#241D17] dark:bg-[#332922] dark:text-[#EFE6D8]'
+                              : 'text-[#6E6153] hover:bg-[#EAE1D3]/60 hover:text-[#241D17] dark:text-[#B5A693] dark:hover:bg-[#29211B] dark:hover:text-[#EFE6D8]'
+                          }`}
+                        >
+                          <span className="truncate">{option.label}</span>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-xs font-mono-tabular opacity-60">
+                              {option.count}
+                            </span>
+                            {active && (
+                              <Check className="h-3.5 w-3.5 text-[#A65E22] dark:text-[#E29A50]" />
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {spotlightTagFilter && (
+                      <div className="mt-1 border-t border-[#D7CBB8]/70 pt-1 dark:border-[#3B3026]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSpotlightTagFilter(null);
+                            setFilterMenuOpen(false);
+                          }}
+                          className="flex min-h-[38px] w-full items-center justify-between gap-2 rounded-xl px-3 py-1 text-xs text-[#A65E22] hover:bg-[#EAE1D3]/60 dark:text-[#E29A50] dark:hover:bg-[#29211B]"
+                        >
+                          <span className="truncate">#{spotlightTagFilter}</span>
+                          <X className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               type="button"
-              onClick={() => setActiveTab('backup')}
-              className="inline-flex min-h-[36px] items-center gap-1.5 hover:text-[#221F1B] dark:hover:text-[#F2ECE4]"
+              onClick={() => {
+                setActiveTab('backup');
+                setFilterMenuOpen(false);
+              }}
+              aria-label={syncAriaLabel}
+              title={syncAriaLabel}
+              className="hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[#6E6153] transition hover:bg-[#EAE1D3]/80 dark:text-[#B5A693] dark:hover:bg-[#201A15]"
             >
-              <Cloud className="h-3.5 w-3.5 text-[#3E5C4E] dark:text-[#86B39D]" />
-              <span>
-                {isSyncing
-                  ? 'Syncing shared vault...'
-                  : pendingSyncCount > 0
-                  ? `${pendingSyncCount} waiting to sync`
-                  : `Signed in as ${user.email}`}
-              </span>
+              <Cloud className="h-4 w-4 text-[#9A7B4F] dark:text-[#C29F6D]" />
+              {pendingSyncCount > 0 && (
+                <span className="ml-1 text-xs font-mono-tabular">{pendingSyncCount}</span>
+              )}
             </button>
 
             {unseenPartnerTags.length > 0 && (
@@ -737,55 +916,69 @@ export default function App() {
                 onClick={() => {
                   setDismissedModalForSession(false);
                   setNewTagsModalOpen(true);
+                  setFilterMenuOpen(false);
                 }}
-                className="inline-flex min-h-[36px] items-center gap-1.5 font-medium text-[#3E5C4E] underline decoration-[#3E5C4E]/40 underline-offset-4 hover:text-[#221F1B] dark:text-[#86B39D] dark:decoration-[#86B39D]/40 dark:hover:text-[#F2ECE4]"
+                aria-label={`${unseenPartnerTags.length} new ${
+                  unseenPartnerTags.length === 1 ? 'tag' : 'tags'
+                }`}
+                title={`${unseenPartnerTags.length} new`}
+                className="inline-flex min-h-[44px] min-w-[40px] items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-mono-tabular font-medium text-[#A65E22] hover:bg-[#EAE1D3]/80 dark:text-[#E29A50] dark:hover:bg-[#201A15]"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>
-                  {unseenPartnerTags.length} new{' '}
-                  {unseenPartnerTags.length === 1 ? 'tag' : 'tags'} for you
-                </span>
+                <Sparkles className="h-4 w-4" />
+                <span>{unseenPartnerTags.length}</span>
               </button>
             )}
-          </div>
 
-          <div className="flex items-center gap-2">
-            <PWAInstallButton compact />
+            <div className="hidden md:block">
+              <PWAInstallButton compact />
+            </div>
+
             <button
               type="button"
               onClick={toggleTheme}
               aria-label={prefs.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#DDD4C7] bg-[#FAF8F4] px-3 text-xs font-medium text-[#221F1B] transition hover:bg-[#EFE9E0] dark:border-[#342E28] dark:bg-[#1E1B18] dark:text-[#F2ECE4] dark:hover:bg-[#2A2622] whitespace-nowrap shrink-0"
+              title={prefs.theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[#241D17] transition hover:bg-[#EAE1D3]/80 dark:text-[#EFE6D8] dark:hover:bg-[#201A15] shrink-0"
             >
               {prefs.theme === 'dark' ? (
-                <>
-                  <Sun className="h-4 w-4" />
-                  <span className="hidden sm:inline">Light</span>
-                </>
+                <Sun className="h-4 w-4" />
               ) : (
-                <>
-                  <Moon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Evening Dark</span>
-                </>
+                <Moon className="h-4 w-4" />
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingEntry(null);
+                setEditorOpen(true);
+                setFilterMenuOpen(false);
+              }}
+              aria-label="Write tag"
+              title="Write tag"
+              className="hidden md:flex ml-0.5 min-h-[42px] min-w-[42px] items-center justify-center rounded-xl bg-[#A65E22] text-[#FBF8F1] shadow-xs transition hover:bg-[#8C4D19] dark:bg-[#C87A32] dark:hover:bg-[#D98B42] shrink-0"
+            >
+              <Plus className="h-4 w-4" />
             </button>
           </div>
         </div>
+      </header>
 
+      {/* Main Content */}
+      <main className="relative z-10 mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6 pt-5 pb-24 md:pb-12">
         {!isLoaded ? (
-          <div className="py-20 text-center text-sm text-[#6B6257] dark:text-[#AEA498]">
-            Opening your gift tags...
+          <div className="py-20 text-center text-sm text-[#6E6153] dark:text-[#B5A693]">
+            ...
           </div>
         ) : activeTab === 'reflect' ? (
           <ReflectView
             entries={entries}
             currentSpotlight={currentSpotlight}
             prefs={prefs}
+            userEmail={user.email}
             perspectiveFilter={perspectiveFilter}
             selectedTag={spotlightTagFilter}
             drawKey={drawKey}
-            onPerspectiveChange={setPerspectiveFilter}
-            onClearTag={() => setSpotlightTagFilter(null)}
             onDrawRandom={handleDrawRandom}
             onToggleFavorite={(entry) => void handleToggleFavorite(entry)}
             onEdit={(entry) => {
@@ -801,13 +994,13 @@ export default function App() {
               setEditingEntry(null);
               setEditorOpen(true);
             }}
-            onGoToImport={() => setActiveTab('backup')}
           />
         ) : activeTab === 'collection' ? (
           <CollectionView
             entries={entries}
             prefs={prefs}
             allTags={allTags}
+            initialPerspectiveFilter={incomingPerspective ?? 'all'}
             initialTagFilter={collectionTagJump}
             onToggleFavorite={(entry) => void handleToggleFavorite(entry)}
             onEdit={(entry) => {
@@ -839,23 +1032,23 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile Bottom Thumb-Zone Navigation Bar (64px + safe area) */}
+      {/* Minimalist Mobile Bottom Icon Bar */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[#E3DBD0] bg-[#FAF8F4]/95 backdrop-blur-md pb-safe dark:border-[#2A2520] dark:bg-[#1A1714]/95"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[#D7CBB8] bg-[#FBF8F1]/95 backdrop-blur-md pb-safe dark:border-[#30271F] dark:bg-[#1A1511]/95"
       >
-        <div className="grid grid-cols-4 h-16 items-center">
+        <div className="grid grid-cols-4 h-14 items-center">
           <button
             type="button"
             onClick={() => setActiveTab('reflect')}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[11px] font-medium ${
+            aria-label="Reflect"
+            className={`flex items-center justify-center min-h-[44px] ${
               activeTab === 'reflect'
-                ? 'text-[#3E5C4E] dark:text-[#86B39D]'
-                : 'text-[#6B6257] dark:text-[#AEA498]'
+                ? 'text-[#A65E22] dark:text-[#E29A50]'
+                : 'text-[#6E6153] dark:text-[#B5A693]'
             }`}
           >
             <Sparkles className="h-5 w-5" />
-            <span>Reflect</span>
           </button>
 
           <button
@@ -864,14 +1057,14 @@ export default function App() {
               setCollectionTagJump(null);
               setActiveTab('collection');
             }}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[11px] font-medium ${
+            aria-label="All tags"
+            className={`flex items-center justify-center min-h-[44px] ${
               activeTab === 'collection'
-                ? 'text-[#3E5C4E] dark:text-[#86B39D]'
-                : 'text-[#6B6257] dark:text-[#AEA498]'
+                ? 'text-[#A65E22] dark:text-[#E29A50]'
+                : 'text-[#6E6153] dark:text-[#B5A693]'
             }`}
           >
-            <BookOpen className="h-5 w-5" />
-            <span>All Tags</span>
+            <LayoutGrid className="h-5 w-5" />
           </button>
 
           <button
@@ -880,23 +1073,23 @@ export default function App() {
               setEditingEntry(null);
               setEditorOpen(true);
             }}
-            className="flex flex-col items-center justify-center min-h-[44px] gap-1 text-[11px] font-medium text-[#3E5C4E] dark:text-[#86B39D]"
+            aria-label="Write tag"
+            className="flex items-center justify-center min-h-[44px] text-[#A65E22] dark:text-[#E29A50]"
           >
             <Plus className="h-5 w-5" />
-            <span>Write</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('backup')}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[11px] font-medium ${
+            aria-label="Settings and backup"
+            className={`flex items-center justify-center min-h-[44px] ${
               activeTab === 'backup'
-                ? 'text-[#3E5C4E] dark:text-[#86B39D]'
-                : 'text-[#6B6257] dark:text-[#AEA498]'
+                ? 'text-[#A65E22] dark:text-[#E29A50]'
+                : 'text-[#6E6153] dark:text-[#B5A693]'
             }`}
           >
-            <Settings className="h-5 w-5" />
-            <span>Backup</span>
+            <SlidersHorizontal className="h-5 w-5" />
           </button>
         </div>
       </nav>

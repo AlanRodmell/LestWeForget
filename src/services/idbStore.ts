@@ -5,6 +5,7 @@ import {
   MAX_LABEL_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS,
+  normalizeLegacyLabels,
   SAFE_ID_REGEX,
   type AppPreferences,
   type GratitudeEntry,
@@ -90,12 +91,13 @@ export function sanitizeTags(rawTags: string[]): string[] {
 export function sanitizeEntry(entry: GratitudeEntry): GratitudeEntry {
   const safeId = SAFE_ID_REGEX.test(entry.id) ? entry.id.slice(0, 128) : generateSafeId();
   const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(entry.entryDate) ? entry.entryDate : todayIsoDate();
+  const safePerspective = entry.perspective === 'from_her' ? 'from_her' : 'from_me';
   return {
     ...entry,
     id: safeId,
     text: sanitizeEntryText(entry.text),
-    perspective: entry.perspective === 'from_her' ? 'from_her' : 'from_me',
-    tagStyle: entry.tagStyle === 'kraft' ? 'kraft' : 'white',
+    perspective: safePerspective,
+    tagStyle: safePerspective === 'from_her' ? 'kraft' : 'white',
     tags: sanitizeTags(Array.isArray(entry.tags) ? entry.tags : []),
     entryDate: safeDate,
     isFavorite: Boolean(entry.isFavorite),
@@ -171,21 +173,22 @@ export async function getPreferences(): Promise<AppPreferences> {
   if (!record) {
     return { ...DEFAULT_PREFERENCES, theme: localTheme };
   }
-  return {
+  return normalizeLegacyLabels({
     ...DEFAULT_PREFERENCES,
     ...record.data,
     theme: localTheme,
-  };
+  });
 }
 
 export async function savePreferences(prefs: AppPreferences): Promise<AppPreferences> {
   const db = await getDB();
+  const normalized = normalizeLegacyLabels(prefs);
   const sanitized: AppPreferences = {
-    ...prefs,
-    meLabel: (prefs.meLabel.trim() || DEFAULT_PREFERENCES.meLabel).slice(0, MAX_LABEL_LENGTH),
-    herLabel: (prefs.herLabel.trim() || DEFAULT_PREFERENCES.herLabel).slice(0, MAX_LABEL_LENGTH),
-    reminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(prefs.reminderTime)
-      ? prefs.reminderTime
+    ...normalized,
+    meLabel: (normalized.meLabel.trim() || DEFAULT_PREFERENCES.meLabel).slice(0, MAX_LABEL_LENGTH),
+    herLabel: (normalized.herLabel.trim() || DEFAULT_PREFERENCES.herLabel).slice(0, MAX_LABEL_LENGTH),
+    reminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(normalized.reminderTime)
+      ? normalized.reminderTime
       : DEFAULT_PREFERENCES.reminderTime,
   };
   await db.put('preferences', { key: 'app_prefs', data: sanitized });

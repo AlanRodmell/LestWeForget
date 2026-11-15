@@ -13,6 +13,9 @@
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/kalam": "^5.3.0",
+    "@fontsource/lora": "^5.3.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",

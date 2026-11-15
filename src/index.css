@@ -3,15 +3,14 @@
 
 @layer base {
   :root {
-    --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-handwriting: 'Patrick Hand', 'Segoe Print', cursive, sans-serif;
+    --font-display: 'Lora', Georgia, 'Times New Roman', serif;
+    --font-sans: 'Lora', Georgia, 'Times New Roman', serif;
+    --font-handwriting: 'Kalam', 'Segoe Print', cursive, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   }
 
   body {
     font-family: var(--font-sans);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
@@ -21,7 +20,7 @@
 
 .font-handwriting {
   font-family: var(--font-handwriting);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.005em;
 }
 
 .font-mono-tabular {
@@ -29,47 +28,124 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Tactile paper grain overlay using subtle CSS radial speckle */
+/* Warm soft bookshop & library reading-lamp illumination */
+.warm-desk-light {
+  background-image:
+    radial-gradient(
+      ellipse 85% 60% at 50% 10%,
+      rgba(255, 224, 172, 0.45) 0%,
+      rgba(245, 239, 228, 0) 72%
+    ),
+    radial-gradient(
+      circle at 50% 45%,
+      rgba(235, 168, 92, 0.14) 0%,
+      transparent 65%
+    );
+}
+
+.dark .warm-desk-light {
+  background-image:
+    radial-gradient(
+      ellipse 80% 58% at 50% 12%,
+      rgba(229, 154, 72, 0.18) 0%,
+      rgba(22, 18, 15, 0) 72%
+    ),
+    radial-gradient(
+      circle at 50% 45%,
+      rgba(212, 140, 70, 0.11) 0%,
+      transparent 62%
+    );
+}
+
+/* Tactile cotton rag & brown kraft laid-paper textures */
 .paper-grain-white {
   background-image:
-    radial-gradient(rgba(34, 31, 27, 0.025) 1px, transparent 0),
-    radial-gradient(rgba(34, 31, 27, 0.018) 1px, transparent 0);
-  background-size: 24px 24px;
-  background-position: 0 0, 12px 12px;
+    repeating-linear-gradient(
+      0deg,
+      rgba(110, 97, 83, 0.018) 0px,
+      rgba(110, 97, 83, 0.018) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
+    radial-gradient(rgba(36, 29, 23, 0.024) 1px, transparent 0);
+  background-size: 100% 5px, 22px 22px;
 }
 
 .paper-grain-kraft {
   background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(62, 42, 24, 0.024) 0px,
+      rgba(62, 42, 24, 0.024) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
     radial-gradient(rgba(62, 42, 24, 0.045) 1px, transparent 0),
     radial-gradient(rgba(255, 248, 236, 0.06) 1px, transparent 0);
-  background-size: 20px 20px;
-  background-position: 0 0, 10px 10px;
+  background-size: 100% 5px, 20px 20px, 20px 20px;
+  background-position: 0 0, 0 0, 10px 10px;
 }
 
 .dark .paper-grain-white {
   background-image:
-    radial-gradient(rgba(255, 248, 236, 0.03) 1px, transparent 0),
-    radial-gradient(rgba(0, 0, 0, 0.12) 1px, transparent 0);
+    repeating-linear-gradient(
+      0deg,
+      rgba(239, 230, 216, 0.018) 0px,
+      rgba(239, 230, 216, 0.018) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
+    radial-gradient(rgba(255, 248, 236, 0.025) 1px, transparent 0);
+  background-size: 100% 5px, 22px 22px;
 }
 
 .dark .paper-grain-kraft {
   background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 236, 210, 0.02) 0px,
+      rgba(255, 236, 210, 0.02) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
     radial-gradient(rgba(255, 236, 210, 0.03) 1px, transparent 0),
     radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 0);
+  background-size: 100% 5px, 20px 20px, 20px 20px;
+}
+
+/* Faint ruled pen-on-paper guide lines inside the handwriting note block */
+.ruled-stationery-light {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 29px,
+    rgba(130, 110, 86, 0.11) 29px,
+    rgba(130, 110, 86, 0.11) 30px
+  );
+}
+
+.dark .ruled-stationery-light {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 29px,
+    rgba(239, 230, 216, 0.075) 29px,
+    rgba(239, 230, 216, 0.075) 30px
+  );
 }
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* 3D Gift Tag Flip Utilities */
+/* 3D Tag Flip Utilities */
 .tag-perspective {
-  perspective: 1200px;
+  perspective: 1400px;
 }
 
 .tag-flip-inner {
   transform-style: preserve-3d;
-  transition: transform 480ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .tag-flip-inner.is-flipped {
@@ -85,20 +161,85 @@
   transform: rotateY(180deg);
 }
 
-@keyframes fadeSlide {
+@keyframes leadInReveal {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.985);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
+}
+
+@keyframes firstCardReveal {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-18deg) translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) translateY(0) scale(1);
+  }
+}
+
+@keyframes continueReveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardFlipOut {
+  0% {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0.15;
+    transform: perspective(1400px) rotateY(88deg) translateY(-4px) scale(0.965);
+  }
+}
+
+@keyframes cardFlipIn {
+  0% {
+    opacity: 0.15;
+    transform: perspective(1400px) rotateY(-88deg) translateY(-4px) scale(0.965);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) translateY(0) scale(1);
+  }
+}
+
+.animate-lead-in {
+  animation: leadInReveal 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-first-card {
+  animation: firstCardReveal 680ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both;
+}
+
+.animate-continue-in {
+  animation: continueReveal 460ms cubic-bezier(0.22, 1, 0.36, 1) 380ms both;
+}
+
+.animate-card-flip-out {
+  animation: cardFlipOut 380ms cubic-bezier(0.4, 0, 0.65, 1) forwards;
+}
+
+.animate-card-flip-in {
+  animation: cardFlipIn 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
 }

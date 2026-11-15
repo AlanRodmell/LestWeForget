@@ -169,6 +169,10 @@
           "type": "number",
           "description": "Unix epoch milliseconds of the last acknowledged check for new partner entries."
         },
+        "recentDrawIds": {
+          "type": "array",
+          "description": "Bounded list (max 50) of recently drawn entry IDs to prevent repeat cards across sessions."
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time",
