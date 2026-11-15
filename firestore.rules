@@ -1,0 +1,299 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAllowedCoupleMember() {
+      return isVerifiedUser() &&
+        request.auth.token.email is string &&
+        (request.auth.token.email.lower() == 'alan.rodmell@gmail.com' ||
+         request.auth.token.email.lower() == 'jlmclaren84@gmail.com');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidSharedVault(data) {
+      return data.keys().hasAll([
+          'id',
+          'createdBy',
+          'meLabel',
+          'herLabel',
+          'reminderEnabled',
+          'reminderTime',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'createdBy',
+          'meLabel',
+          'herLabel',
+          'reminderEnabled',
+          'reminderTime',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == 'couple_vault' &&
+        isValidId(data.createdBy) &&
+        data.meLabel is string && data.meLabel.size() >= 1 && data.meLabel.size() <= 48 &&
+        data.herLabel is string && data.herLabel.size() >= 1 && data.herLabel.size() <= 48 &&
+        data.reminderEnabled is bool &&
+        data.reminderTime is string && data.reminderTime.size() == 5 &&
+        data.reminderTime.matches('^([01]\\d|2[0-3]):[0-5]\\d$') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTagItem(tag) {
+      return tag is string && tag.size() >= 1 && tag.size() <= 24;
+    }
+
+    function isValidTagsList(tags) {
+      return tags is list &&
+        tags.size() <= 8 &&
+        (tags.size() < 1 || isValidTagItem(tags[0])) &&
+        (tags.size() < 2 || isValidTagItem(tags[1])) &&
+        (tags.size() < 3 || isValidTagItem(tags[2])) &&
+        (tags.size() < 4 || isValidTagItem(tags[3])) &&
+        (tags.size() < 5 || isValidTagItem(tags[4])) &&
+        (tags.size() < 6 || isValidTagItem(tags[5])) &&
+        (tags.size() < 7 || isValidTagItem(tags[6])) &&
+        (tags.size() < 8 || isValidTagItem(tags[7]));
+    }
+
+    function isValidGratitudeEntry(data) {
+      return data.keys().hasAll([
+          'id',
+          'vaultId',
+          'authorUid',
+          'text',
+          'perspective',
+          'tagStyle',
+          'tags',
+          'entryDate',
+          'isFavorite',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'vaultId',
+          'authorUid',
+          'text',
+          'perspective',
+          'tagStyle',
+          'tags',
+          'entryDate',
+          'isFavorite',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.vaultId) &&
+        data.vaultId == 'couple_vault' &&
+        isValidId(data.authorUid) &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 500 &&
+        data.perspective in ['from_me', 'from_her'] &&
+        data.tagStyle in ['white', 'kraft'] &&
+        isValidTagsList(data.tags) &&
+        data.entryDate is string && data.entryDate.size() == 10 &&
+        data.entryDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.isFavorite is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMemberReadState(data) {
+      return data.keys().hasAll([
+          'uid',
+          'vaultId',
+          'lastSeenMs',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'vaultId',
+          'lastSeenMs',
+          'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        isValidId(data.vaultId) &&
+        data.vaultId == 'couple_vault' &&
+        data.lastSeenMs is number &&
+        data.lastSeenMs >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    // Master Gate helper verifying parent vault existence
+    function hasParentVault(vaultId) {
+      return vaultId == 'couple_vault' &&
+        exists(/databases/$(database)/documents/vaults/$(vaultId)) &&
+        get(/databases/$(database)/documents/vaults/$(vaultId)).data.id == 'couple_vault';
+    }
+
+    // --- Collection Rules ---
+    match /vaults/{vaultId} {
+      allow get: if isValidId(vaultId) &&
+        vaultId == 'couple_vault' &&
+        isAllowedCoupleMember() &&
+        (resource == null || existing().id == 'couple_vault');
+
+      allow list: if false;
+
+      allow create: if isValidId(vaultId) &&
+        vaultId == 'couple_vault' &&
+        isAllowedCoupleMember() &&
+        isValidSharedVault(incoming()) &&
+        incoming().id == vaultId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(vaultId) &&
+        vaultId == 'couple_vault' &&
+        isAllowedCoupleMember() &&
+        isValidSharedVault(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'meLabel',
+          'herLabel',
+          'reminderEnabled',
+          'reminderTime',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+
+      match /entries/{entryId} {
+        allow get: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(entryId) &&
+          isAllowedCoupleMember() &&
+          (resource == null || existing().vaultId == 'couple_vault') &&
+          hasParentVault(vaultId);
+
+        // Cost-optimized list rule: evaluates resource.data directly without get()/exists()
+        allow list: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isAllowedCoupleMember() &&
+          resource.data.vaultId == 'couple_vault';
+
+        allow create: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(entryId) &&
+          isAllowedCoupleMember() &&
+          isValidGratitudeEntry(incoming()) &&
+          incoming().id == entryId &&
+          incoming().vaultId == vaultId &&
+          incoming().authorUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasParentVault(vaultId);
+
+        allow update: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(entryId) &&
+          isAllowedCoupleMember() &&
+          isValidGratitudeEntry(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().vaultId == existing().vaultId &&
+          incoming().authorUid == existing().authorUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          hasParentVault(vaultId) && (
+            // Action: Edit Entry Content (including offline synced edits)
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'text',
+              'perspective',
+              'tagStyle',
+              'tags',
+              'entryDate',
+              'isFavorite',
+              'updatedAt'
+            ]) ||
+            // Action: Toggle Favorite
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'isFavorite',
+              'updatedAt'
+            ])
+          );
+
+        allow delete: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(entryId) &&
+          isAllowedCoupleMember() &&
+          existing().vaultId == 'couple_vault' &&
+          hasParentVault(vaultId);
+      }
+
+      match /members/{memberId} {
+        allow get: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(memberId) &&
+          isAllowedCoupleMember() &&
+          memberId == request.auth.uid &&
+          (resource == null || existing().uid == request.auth.uid) &&
+          hasParentVault(vaultId);
+
+        allow list: if false;
+
+        allow create: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(memberId) &&
+          isAllowedCoupleMember() &&
+          memberId == request.auth.uid &&
+          isValidMemberReadState(incoming()) &&
+          incoming().uid == memberId &&
+          incoming().vaultId == vaultId &&
+          incoming().updatedAt == request.time &&
+          hasParentVault(vaultId);
+
+        allow update: if isValidId(vaultId) &&
+          vaultId == 'couple_vault' &&
+          isValidId(memberId) &&
+          isAllowedCoupleMember() &&
+          memberId == request.auth.uid &&
+          isValidMemberReadState(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().vaultId == existing().vaultId &&
+          incoming().updatedAt == request.time &&
+          hasParentVault(vaultId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'lastSeenMs',
+            'updatedAt'
+          ]);
+
+        allow delete: if false;
+      }
+    }
+  }
+}

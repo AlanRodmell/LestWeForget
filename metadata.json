@@ -1,0 +1,6 @@
+{
+  "name": "Kept Tags",
+  "description": "A minimalist offline-first gratitude vault displaying shared moments on white and brown kraft gift tags.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
