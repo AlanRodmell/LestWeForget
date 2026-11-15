@@ -26,6 +26,7 @@ import {
   type GratitudeEntry,
 } from '../types';
 import {
+  applyCloudSnapshotDiff,
   getAllStoredEntries,
   hardDeleteEntry,
   sanitizeEntryText,
@@ -207,6 +208,9 @@ export function subscribeToCloudEntries(
         const localMap = new Map<string, GratitudeEntry>(localAll.map((e) => [e.id, e]));
         const remoteIds = new Set<string>();
 
+        const toUpsert: GratitudeEntry[] = [];
+        const idsToDelete: string[] = [];
+
         for (const docSnap of snapshot.docs) {
           const data = docSnap.data();
           const id = typeof data.id === 'string' ? data.id : docSnap.id;
@@ -232,7 +236,19 @@ export function subscribeToCloudEntries(
             cloudCreated: true,
             authorUid: typeof data.authorUid === 'string' ? data.authorUid : undefined,
           };
-          await upsertEntry(remoteEntry);
+
+          const isUnchanged =
+            existingLocal &&
+            existingLocal.syncStatus === 'synced' &&
+            existingLocal.cloudCreated === true &&
+            existingLocal.updatedAtMs === remoteEntry.updatedAtMs &&
+            existingLocal.isFavorite === remoteEntry.isFavorite &&
+            existingLocal.text === remoteEntry.text &&
+            existingLocal.perspective === remoteEntry.perspective;
+
+          if (!isUnchanged) {
+            toUpsert.push(remoteEntry);
+          }
         }
 
         for (const localEntry of localAll) {
@@ -242,12 +258,12 @@ export function subscribeToCloudEntries(
             localEntry.syncStatus === 'synced' &&
             !remoteIds.has(localEntry.id)
           ) {
-            await hardDeleteEntry(localEntry.id);
+            idsToDelete.push(localEntry.id);
           }
         }
 
-        const refreshed = await getAllStoredEntries();
-        onMerged(refreshed.filter((e) => e.syncStatus !== 'deleted'));
+        const activeEntries = await applyCloudSnapshotDiff(toUpsert, idsToDelete);
+        onMerged(activeEntries);
       } catch (err) {
         if (onSyncError && err instanceof Error) {
           onSyncError(err);

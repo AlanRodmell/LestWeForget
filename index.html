@@ -9,8 +9,7 @@
     <meta property="og:description" content="A minimalist offline-first gratitude vault displaying shared moments on white and brown kraft tags." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#F5EFE4" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16120F" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" id="app-theme-color" content="#EFE2CC" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -22,14 +21,19 @@
         try {
           var stored = localStorage.getItem('kept_tags_theme');
           var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (stored === 'dark' || (!stored && prefersDark)) {
+          var isDark = stored === 'dark' || (!stored && prefersDark);
+          if (isDark) {
             document.documentElement.classList.add('dark');
+          }
+          var meta = document.getElementById('app-theme-color');
+          if (meta) {
+            meta.setAttribute('content', isDark ? '#16120F' : '#EFE2CC');
           }
         } catch (e) {}
       })();
     </script>
   </head>
-  <body class="bg-[#F5EFE4] text-[#241D17] dark:bg-[#16120F] dark:text-[#EFE6D8] antialiased selection:bg-[#A65E22]/20 dark:selection:bg-[#D48C46]/30">
+  <body class="bg-[#EFE2CC] text-[#241D17] dark:bg-[#16120F] dark:text-[#EFE6D8] antialiased selection:bg-[#A65E22]/20 dark:selection:bg-[#D48C46]/30">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

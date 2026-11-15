@@ -101,15 +101,3 @@ export function normalizeLegacyLabels(prefs: AppPreferences): AppPreferences {
         : prefs.herLabel,
   };
 }
-
-export interface ParsedCsvRow {
-  rowNumber: number;
-  text: string;
-  wasTruncated: boolean;
-  perspective: Perspective;
-  tagStyle: TagStyle;
-  tags: string[];
-  entryDate: string;
-  isFavorite: boolean;
-  error?: string;
-}

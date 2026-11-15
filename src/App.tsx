@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -8,6 +8,7 @@ import {
 import {
   Check,
   Cloud,
+  Feather,
   LayoutGrid,
   ListFilter,
   Moon,
@@ -24,7 +25,6 @@ import {
   isAllowedEmail,
   type AppPreferences,
   type GratitudeEntry,
-  type ParsedCsvRow,
   type Perspective,
   type TagStyle,
 } from './types';
@@ -36,7 +36,6 @@ import {
   markEntryDeleted,
   savePreferences,
   todayIsoDate,
-  upsertEntriesBulk,
   upsertEntry,
 } from './services/idbStore';
 import {
@@ -58,8 +57,6 @@ import {
   tryRegisterPeriodicSync,
 } from './services/notificationService';
 import { ReflectView } from './components/ReflectView';
-import { CollectionView } from './components/CollectionView';
-import { BackupSettingsView } from './components/BackupSettingsView';
 import { EntryEditorModal } from './components/EntryEditorModal';
 import { NewPartnerTagsModal } from './components/NewPartnerTagsModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -67,10 +64,34 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { AuthGate } from './components/AuthGate';
 import { StationeryBackdrop } from './components/StationeryBackdrop';
 
-type ActiveTab = 'reflect' | 'collection' | 'backup';
+const CollectionView = lazy(() =>
+  import('./components/CollectionView').then((m) => ({ default: m.CollectionView }))
+);
+const ProposalLetterView = lazy(() =>
+  import('./components/ProposalLetterView').then((m) => ({ default: m.ProposalLetterView }))
+);
+const BackupSettingsView = lazy(() =>
+  import('./components/BackupSettingsView').then((m) => ({ default: m.BackupSettingsView }))
+);
+
+type ActiveTab = 'reflect' | 'collection' | 'letter' | 'backup';
 
 function isAuthorizedUser(u: User | null): boolean {
   return Boolean(u && u.emailVerified && isAllowedEmail(u.email));
+}
+
+function isCard51Entry(entry: GratitudeEntry): boolean {
+  const lowerText = entry.text.toLowerCase();
+  if (
+    lowerText.includes('may not have been your first') &&
+    lowerText.includes('let me be your last')
+  ) {
+    return true;
+  }
+  return entry.tags.some((t) => {
+    const lt = t.trim().toLowerCase();
+    return lt === 'card51' || lt === 'card-51' || lt === 'card 51';
+  });
 }
 
 export default function App() {
@@ -127,14 +148,20 @@ export default function App() {
     };
   }, [filterMenuOpen]);
 
-  // Apply dark mode class whenever theme preference changes
+  // Apply dark mode class and dynamically sync mobile browser system bar theme-color
   useEffect(() => {
     const root = document.documentElement;
-    if (prefs.theme === 'dark') {
+    const isDark = prefs.theme === 'dark';
+    if (isDark) {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
     }
+    const barColor = isDark ? '#16120F' : '#EFE2CC';
+    const metas = document.querySelectorAll('meta[name="theme-color"]');
+    metas.forEach((meta) => {
+      meta.setAttribute('content', barColor);
+    });
   }, [prefs.theme]);
 
   // Load IndexedDB preferences & entries once authorized
@@ -271,13 +298,19 @@ export default function App() {
     return () => window.removeEventListener('online', handleOnline);
   }, [user]);
 
+  // General deck excludes Card 51 so Card 51 is exclusively shown on the Letter page
+  const generalEntries = useMemo(
+    () => entries.filter((e) => !isCard51Entry(e)),
+    [entries]
+  );
+
   // Daily push notification scheduler
   useEffect(() => {
     if (!isLoaded || !isAuthorizedUser(user)) return;
 
     const checkReminder = async () => {
       if (!shouldFireDailyReminder(prefs)) return;
-      const picked = pickRandomEntry(entries);
+      const picked = pickRandomEntry(generalEntries);
       const sent = await sendGratitudeNotification(picked, prefs);
       if (sent) {
         const updated = await savePreferences({
@@ -308,23 +341,23 @@ export default function App() {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [isLoaded, user, prefs, entries]);
+  }, [isLoaded, user, prefs, generalEntries]);
 
-  // All unique tags across vault
+  // All unique tags across general vault
   const allTags = useMemo(() => {
     const map = new Map<string, string>();
-    for (const entry of entries) {
+    for (const entry of generalEntries) {
       for (const tag of entry.tags) {
         const key = tag.toLowerCase();
         if (!map.has(key)) map.set(key, tag);
       }
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
-  }, [entries]);
+  }, [generalEntries]);
 
   // Matching pool for Reflect view
   const filteredPool = useMemo(() => {
-    return entries.filter((e) => {
+    return generalEntries.filter((e) => {
       if (perspectiveFilter !== 'all' && e.perspective !== perspectiveFilter) return false;
       if (
         spotlightTagFilter &&
@@ -334,7 +367,7 @@ export default function App() {
       }
       return true;
     });
-  }, [entries, perspectiveFilter, spotlightTagFilter]);
+  }, [generalEntries, perspectiveFilter, spotlightTagFilter]);
 
   const currentSpotlight = useMemo(() => {
     if (!spotlightId || filteredPool.length === 0) return null;
@@ -439,7 +472,7 @@ export default function App() {
     (next: 'all' | Perspective) => {
       setPerspectiveFilter(next);
       if (spotlightId) {
-        const nextPool = entries.filter((e) => {
+        const nextPool = generalEntries.filter((e) => {
           if (next !== 'all' && e.perspective !== next) return false;
           if (
             spotlightTagFilter &&
@@ -457,7 +490,7 @@ export default function App() {
         }
       }
     },
-    [entries, spotlightId, spotlightTagFilter, recentDrawIds, recordDrawnEntry]
+    [generalEntries, spotlightId, spotlightTagFilter, recentDrawIds, recordDrawnEntry]
   );
 
   const refreshLocalEntries = async () => {
@@ -509,136 +542,55 @@ export default function App() {
     }
   };
 
-  const handleToggleFavorite = async (entry: GratitudeEntry) => {
-    if (!user || !isAuthorizedUser(user)) return;
-    const updated: GratitudeEntry = {
-      ...entry,
-      isFavorite: !entry.isFavorite,
-      updatedAtMs: Date.now(),
-      syncStatus: 'pending',
-    };
-    const saved = await upsertEntry(updated);
-    await refreshLocalEntries();
-
-    if (navigator.onLine) {
-      try {
-        await pushEntryToCloud(user.uid, saved);
-        await refreshLocalEntries();
-      } catch (err) {
-        setSyncError(err instanceof Error ? err.message : 'Could not sync favorite.');
-      }
-    }
-  };
-
-  const handleDeleteEntry = async (id: string) => {
-    if (!user || !isAuthorizedUser(user)) return;
-    await markEntryDeleted(id);
-    const fresh = await getActiveEntries();
-    setEntries(fresh);
-    if (spotlightId === id) {
-      const next = pickRandomEntry(fresh);
-      setSpotlightId(next?.id ?? null);
-    }
-
-    if (navigator.onLine) {
-      try {
-        const all = await getAllStoredEntries();
-        const deletedRecord = all.find((e) => e.id === id);
-        if (deletedRecord) {
-          await pushEntryToCloud(user.uid, deletedRecord);
-        }
-      } catch (err) {
-        setSyncError(err instanceof Error ? err.message : 'Could not delete from cloud.');
-      }
-    }
-  };
-
-  const handleImportCsvRows = async (rows: ParsedCsvRow[]): Promise<number> => {
-    if (!user || !isAuthorizedUser(user)) return 0;
-    const now = Date.now();
-    const toInsert: GratitudeEntry[] = rows.map((row, idx) => {
-      const id = generateSafeId();
-      sessionCreatedIdsRef.current.add(id);
-      return {
-        id,
-        text: row.text,
-        perspective: row.perspective,
-        tagStyle: row.tagStyle,
-        tags: row.tags,
-        entryDate: row.entryDate,
-        isFavorite: row.isFavorite,
-        createdAtMs: now + idx,
-        updatedAtMs: now + idx,
+  const handleToggleFavorite = useCallback(
+    async (entry: GratitudeEntry) => {
+      if (!user || !isAuthorizedUser(user)) return;
+      const updated: GratitudeEntry = {
+        ...entry,
+        isFavorite: !entry.isFavorite,
+        updatedAtMs: Date.now(),
         syncStatus: 'pending',
-        cloudCreated: false,
-        authorUid: user.uid,
       };
-    });
+      const saved = await upsertEntry(updated);
+      await refreshLocalEntries();
 
-    await upsertEntriesBulk(toInsert);
-    await refreshLocalEntries();
-
-    if (navigator.onLine) {
-      setIsSyncing(true);
-      try {
-        await pushAllPendingEntries(user.uid);
-        await refreshLocalEntries();
-      } catch (err) {
-        setSyncError(err instanceof Error ? err.message : 'Cloud sync incomplete.');
-      } finally {
-        setIsSyncing(false);
+      if (navigator.onLine) {
+        try {
+          await pushEntryToCloud(user.uid, saved);
+          await refreshLocalEntries();
+        } catch (err) {
+          setSyncError(err instanceof Error ? err.message : 'Could not sync favorite.');
+        }
       }
-    }
-    return toInsert.length;
-  };
+    },
+    [user]
+  );
 
-  const handleRestoreJson = async (
-    importedEntries: GratitudeEntry[],
-    importedPrefs?: Partial<AppPreferences>
-  ): Promise<number> => {
-    if (!user || !isAuthorizedUser(user)) return 0;
-    const now = Date.now();
-    const normalized: GratitudeEntry[] = importedEntries
-      .filter((e) => typeof e.text === 'string' && e.text.trim().length > 0)
-      .map((e, idx) => {
-        const id = typeof e.id === 'string' && e.id ? e.id : generateSafeId();
-        sessionCreatedIdsRef.current.add(id);
-        return {
-          id,
-          text: e.text,
-          perspective: e.perspective === 'from_her' ? 'from_her' : 'from_me',
-          tagStyle: e.tagStyle === 'kraft' ? 'kraft' : 'white',
-          tags: Array.isArray(e.tags) ? e.tags : [],
-          entryDate: typeof e.entryDate === 'string' ? e.entryDate : todayIsoDate(),
-          isFavorite: Boolean(e.isFavorite),
-          createdAtMs: typeof e.createdAtMs === 'number' ? e.createdAtMs : now + idx,
-          updatedAtMs: now + idx,
-          syncStatus: 'pending',
-          cloudCreated: false,
-          authorUid: user.uid,
-        };
-      });
-
-    await upsertEntriesBulk(normalized);
-    await refreshLocalEntries();
-
-    if (importedPrefs) {
-      await handleUpdatePrefs({ ...prefs, ...importedPrefs });
-    }
-
-    if (navigator.onLine) {
-      setIsSyncing(true);
-      try {
-        await pushAllPendingEntries(user.uid);
-        await refreshLocalEntries();
-      } catch (err) {
-        setSyncError(err instanceof Error ? err.message : 'Cloud sync incomplete.');
-      } finally {
-        setIsSyncing(false);
+  const handleDeleteEntry = useCallback(
+    async (id: string) => {
+      if (!user || !isAuthorizedUser(user)) return;
+      await markEntryDeleted(id);
+      const fresh = await getActiveEntries();
+      setEntries(fresh);
+      if (spotlightId === id) {
+        const next = pickRandomEntry(fresh);
+        setSpotlightId(next?.id ?? null);
       }
-    }
-    return normalized.length;
-  };
+
+      if (navigator.onLine) {
+        try {
+          const all = await getAllStoredEntries();
+          const deletedRecord = all.find((e) => e.id === id);
+          if (deletedRecord) {
+            await pushEntryToCloud(user.uid, deletedRecord);
+          }
+        } catch (err) {
+          setSyncError(err instanceof Error ? err.message : 'Could not delete from cloud.');
+        }
+      }
+    },
+    [user, spotlightId]
+  );
 
   const handleUpdatePrefs = async (next: AppPreferences) => {
     const saved = await savePreferences(next);
@@ -731,24 +683,52 @@ export default function App() {
   const isFilterActive = perspectiveFilter !== 'all' || spotlightTagFilter !== null;
 
   return (
-    <div className="relative min-h-dvh flex flex-col bg-[#F5EFE4] text-[#241D17] dark:bg-[#16120F] dark:text-[#EFE6D8] transition-colors">
-      <StationeryBackdrop variant={isStartingScreen ? 'prominent' : 'subtle'} />
+    <div className="relative min-h-dvh flex flex-col bg-[#EFE2CC] text-[#241D17] dark:bg-[#16120F] dark:text-[#EFE6D8] transition-colors">
+      <StationeryBackdrop
+        variant={isStartingScreen ? 'prominent' : 'subtle'}
+        theme={prefs.theme}
+      />
 
       {/* Minimalist Sticky Top Bar (All controls & filters housed cleanly outside <main>) */}
-      <header className="sticky top-0 z-30 h-14 border-b border-[#D7CBB8]/75 bg-[#F5EFE4]/78 backdrop-blur-md dark:border-[#30271F]/75 dark:bg-[#16120F]/78">
+      <header className="sticky top-0 z-30 h-14 border-b border-[#C8A97E]/45 bg-[#EFE2CC]/78 backdrop-blur-md dark:border-[#30271F]/75 dark:bg-[#16120F]/78">
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 sm:gap-8 px-4 sm:px-6">
-          {/* Zone 1: Engraved Serif Wordmark */}
-          <button
-            type="button"
-            onClick={() => {
-              setSpotlightId(null);
-              setActiveTab('reflect');
-              setFilterMenuOpen(false);
-            }}
-            className="font-display text-xl sm:text-2xl font-semibold tracking-tight text-[#241D17] dark:text-[#EFE6D8] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-[#A65E22] rounded"
-          >
-            Lest We Forget
-          </button>
+          {/* Zone 1: Subtle Ringed-Quill Proposal Letter Crest + Engraved Serif Wordmark */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab((prev) => (prev === 'letter' ? 'reflect' : 'letter'));
+                setFilterMenuOpen(false);
+              }}
+              aria-label="The Proposal Letter and Card 51"
+              title="The Letter & Card 51"
+              aria-pressed={activeTab === 'letter'}
+              className={`group relative flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A65E22] cursor-pointer ${
+                activeTab === 'letter'
+                  ? 'border-[#A65E22] bg-[#A65E22]/15 text-[#A65E22] shadow-[0_0_12px_rgba(166,94,34,0.25)] dark:border-[#E8A864] dark:bg-[#E8A864]/20 dark:text-[#E8A864]'
+                  : 'border-[#B37336]/55 bg-[#F6EBD8]/75 text-[#8C5828] hover:border-[#A65E22] hover:bg-[#F6EBD8] hover:text-[#A65E22] dark:border-[#D48C46]/45 dark:bg-[#241B14]/80 dark:text-[#D49A5A] dark:hover:border-[#E8A864] dark:hover:text-[#E8A864]'
+              }`}
+            >
+              {/* Inner delicate signet ring halo */}
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-[2px] rounded-full border border-[#C89D66]/45 dark:border-[#D48C46]/30"
+              />
+              <Feather className="relative h-4 w-4 transition-transform duration-300 group-hover:-rotate-6" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSpotlightId(null);
+                setActiveTab('reflect');
+                setFilterMenuOpen(false);
+              }}
+              className="font-display text-xl sm:text-2xl font-semibold tracking-tight text-[#241D17] dark:text-[#EFE6D8] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-[#A65E22] rounded"
+            >
+              Lest We Forget
+            </button>
+          </div>
 
           {/* Zone 2: Minimalist Icon Navigation (Desktop) */}
           <nav
@@ -831,16 +811,16 @@ export default function App() {
                   >
                     {(
                       [
-                        { id: 'all', label: 'All', count: entries.length },
+                        { id: 'all', label: 'All', count: generalEntries.length },
                         {
                           id: 'from_me',
                           label: prefs.meLabel,
-                          count: entries.filter((e) => e.perspective === 'from_me').length,
+                          count: generalEntries.filter((e) => e.perspective === 'from_me').length,
                         },
                         {
                           id: 'from_her',
                           label: prefs.herLabel,
-                          count: entries.filter((e) => e.perspective === 'from_her').length,
+                          count: generalEntries.filter((e) => e.perspective === 'from_her').length,
                         },
                       ] as const
                     ).map((option) => {
@@ -972,7 +952,7 @@ export default function App() {
           </div>
         ) : activeTab === 'reflect' ? (
           <ReflectView
-            entries={entries}
+            entries={generalEntries}
             currentSpotlight={currentSpotlight}
             prefs={prefs}
             userEmail={user.email}
@@ -995,57 +975,67 @@ export default function App() {
               setEditorOpen(true);
             }}
           />
-        ) : activeTab === 'collection' ? (
-          <CollectionView
-            entries={entries}
-            prefs={prefs}
-            allTags={allTags}
-            initialPerspectiveFilter={incomingPerspective ?? 'all'}
-            initialTagFilter={collectionTagJump}
-            onToggleFavorite={(entry) => void handleToggleFavorite(entry)}
-            onEdit={(entry) => {
-              setEditingEntry(entry);
-              setEditorOpen(true);
-            }}
-            onDelete={(id) => void handleDeleteEntry(id)}
-            onOpenNew={() => {
-              setEditingEntry(null);
-              setEditorOpen(true);
-            }}
-          />
         ) : (
-          <BackupSettingsView
-            entries={entries}
-            prefs={prefs}
-            user={user}
-            authReady={authReady}
-            isSyncing={isSyncing}
-            syncError={syncError}
-            pendingSyncCount={pendingSyncCount}
-            onSignIn={handleSignIn}
-            onSignOut={handleSignOut}
-            onSyncNow={handleSyncNow}
-            onImportCsvRows={handleImportCsvRows}
-            onRestoreJson={handleRestoreJson}
-            onUpdatePrefs={handleUpdatePrefs}
-          />
+          <Suspense
+            fallback={
+              <div className="py-20 text-center text-sm text-[#6E6153] dark:text-[#B5A693]">
+                ...
+              </div>
+            }
+          >
+            {activeTab === 'collection' ? (
+              <CollectionView
+                entries={generalEntries}
+                prefs={prefs}
+                allTags={allTags}
+                initialPerspectiveFilter={incomingPerspective ?? 'all'}
+                initialTagFilter={collectionTagJump}
+                onToggleFavorite={(entry) => void handleToggleFavorite(entry)}
+                onEdit={(entry) => {
+                  setEditingEntry(entry);
+                  setEditorOpen(true);
+                }}
+                onDelete={(id) => void handleDeleteEntry(id)}
+                onOpenNew={() => {
+                  setEditingEntry(null);
+                  setEditorOpen(true);
+                }}
+              />
+            ) : activeTab === 'letter' ? (
+              <ProposalLetterView />
+            ) : (
+              <BackupSettingsView
+                entries={entries}
+                prefs={prefs}
+                user={user}
+                authReady={authReady}
+                isSyncing={isSyncing}
+                syncError={syncError}
+                pendingSyncCount={pendingSyncCount}
+                onSignIn={handleSignIn}
+                onSignOut={handleSignOut}
+                onSyncNow={handleSyncNow}
+                onUpdatePrefs={handleUpdatePrefs}
+              />
+            )}
+          </Suspense>
         )}
       </main>
 
-      {/* Minimalist Mobile Bottom Icon Bar */}
+      {/* Minimalist Mobile Bottom Icon Bar — Warm Bookshop Amber & Parchment Glass */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[#D7CBB8] bg-[#FBF8F1]/95 backdrop-blur-md pb-safe dark:border-[#30271F] dark:bg-[#1A1511]/95"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[#C8A97E]/50 bg-[#EFE2CC]/84 backdrop-blur-md pb-safe dark:border-[#3B2C1E]/75 dark:bg-[#16120F]/86"
       >
         <div className="grid grid-cols-4 h-14 items-center">
           <button
             type="button"
             onClick={() => setActiveTab('reflect')}
             aria-label="Reflect"
-            className={`flex items-center justify-center min-h-[44px] ${
+            className={`flex items-center justify-center min-h-[44px] transition-colors ${
               activeTab === 'reflect'
-                ? 'text-[#A65E22] dark:text-[#E29A50]'
-                : 'text-[#6E6153] dark:text-[#B5A693]'
+                ? 'text-[#A65E22] dark:text-[#E8A864]'
+                : 'text-[#614933] dark:text-[#B5A693]'
             }`}
           >
             <Sparkles className="h-5 w-5" />
@@ -1058,10 +1048,10 @@ export default function App() {
               setActiveTab('collection');
             }}
             aria-label="All tags"
-            className={`flex items-center justify-center min-h-[44px] ${
+            className={`flex items-center justify-center min-h-[44px] transition-colors ${
               activeTab === 'collection'
-                ? 'text-[#A65E22] dark:text-[#E29A50]'
-                : 'text-[#6E6153] dark:text-[#B5A693]'
+                ? 'text-[#A65E22] dark:text-[#E8A864]'
+                : 'text-[#614933] dark:text-[#B5A693]'
             }`}
           >
             <LayoutGrid className="h-5 w-5" />
@@ -1074,7 +1064,7 @@ export default function App() {
               setEditorOpen(true);
             }}
             aria-label="Write tag"
-            className="flex items-center justify-center min-h-[44px] text-[#A65E22] dark:text-[#E29A50]"
+            className="flex items-center justify-center min-h-[44px] text-[#A65E22] dark:text-[#E8A864] transition-colors"
           >
             <Plus className="h-5 w-5" />
           </button>
@@ -1083,10 +1073,10 @@ export default function App() {
             type="button"
             onClick={() => setActiveTab('backup')}
             aria-label="Settings and backup"
-            className={`flex items-center justify-center min-h-[44px] ${
+            className={`flex items-center justify-center min-h-[44px] transition-colors ${
               activeTab === 'backup'
-                ? 'text-[#A65E22] dark:text-[#E29A50]'
-                : 'text-[#6E6153] dark:text-[#B5A693]'
+                ? 'text-[#A65E22] dark:text-[#E8A864]'
+                : 'text-[#614933] dark:text-[#B5A693]'
             }`}
           >
             <SlidersHorizontal className="h-5 w-5" />

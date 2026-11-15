@@ -47,8 +47,16 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
-registerSW({
+const updateSW = registerSW({
   immediate: true,
+  onNeedRefresh() {
+    void updateSW(true);
+  },
+  onRegisteredSW(_swUrl, registration) {
+    if (registration) {
+      void registration.update();
+    }
+  },
 });
 
 createRoot(document.getElementById('root')!).render(

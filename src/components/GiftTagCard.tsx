@@ -42,7 +42,7 @@ function findWordBreakPositions(text: string): number[] {
   return positions;
 }
 
-export const GiftTagCard: React.FC<GiftTagCardProps> = ({
+const GiftTagCardComponent: React.FC<GiftTagCardProps> = ({
   entry,
   prefs,
   spotlight = false,
@@ -70,12 +70,24 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
 
   // Measure exact rendered 4-row capacity at current card width & font
   useLayoutEffect(() => {
+    const text = entry.text.trim();
+    const lineCount = text.split('\n').length;
+    // Fast-path: short notes fit comfortably within 4 rows without DOM measurement or ResizeObserver
+    if (text.length <= 125 && lineCount <= 3) {
+      setSplit({
+        needsFlip: false,
+        frontText: text,
+        backText: '',
+        compactBack: false,
+      });
+      return;
+    }
+
     const box = measureBoxRef.current;
     const measurer = measurerRef.current;
     if (!box || !measurer) return;
 
     const computeSplit = () => {
-      const text = entry.text.trim();
       if (!text) {
         setSplit({ needsFlip: false, frontText: '', backText: '', compactBack: false });
         return;
@@ -309,7 +321,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
 
         {/* Fixed-Dimension Stationery Body */}
         <div
-          className={`flex flex-col justify-between border-x border-b rounded-b-2xl px-6 sm:px-8 pb-3 pt-2.5 ${bodyFixedHeight} ${paperColors.bgClass} ${paperColors.borderClass} ${paperColors.grainClass}`}
+          className={`flex flex-col justify-between border-x border-b rounded-b-2xl px-6 sm:px-8 pb-3 pt-2.5 shadow-[0_12px_28px_rgba(36,24,14,0.11)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.48)] ${bodyFixedHeight} ${paperColors.bgClass} ${paperColors.borderClass} ${paperColors.grainClass}`}
         >
           {/* Classic Editorial Perspective Header */}
           <div
@@ -518,7 +530,7 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
 
   return (
     <article
-      className={`tag-perspective group relative w-full drop-shadow-[0_10px_24px_rgba(36,29,23,0.09)] dark:drop-shadow-[0_14px_30px_rgba(0,0,0,0.52)] ${
+      className={`tag-perspective group relative w-full ${
         spotlight ? 'max-w-[600px] mx-auto' : ''
       }`}
     >
@@ -529,3 +541,5 @@ export const GiftTagCard: React.FC<GiftTagCardProps> = ({
     </article>
   );
 };
+
+export const GiftTagCard = React.memo(GiftTagCardComponent);

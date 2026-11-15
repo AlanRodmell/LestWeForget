@@ -122,17 +122,25 @@ export async function upsertEntry(entry: GratitudeEntry): Promise<GratitudeEntry
   return clean;
 }
 
-export async function upsertEntriesBulk(entries: GratitudeEntry[]): Promise<GratitudeEntry[]> {
+export async function applyCloudSnapshotDiff(
+  toUpsert: GratitudeEntry[],
+  idsToDelete: string[]
+): Promise<GratitudeEntry[]> {
   const db = await getDB();
-  const tx = db.transaction('entries', 'readwrite');
-  const cleaned: GratitudeEntry[] = [];
-  for (const entry of entries) {
-    const clean = sanitizeEntry(entry);
-    cleaned.push(clean);
-    await tx.store.put(clean);
+  if (toUpsert.length > 0 || idsToDelete.length > 0) {
+    const tx = db.transaction('entries', 'readwrite');
+    for (const entry of toUpsert) {
+      await tx.store.put(sanitizeEntry(entry));
+    }
+    for (const id of idsToDelete) {
+      await tx.store.delete(id);
+    }
+    await tx.done;
   }
-  await tx.done;
-  return cleaned;
+  const all = await db.getAll('entries');
+  return all
+    .filter((e) => e.syncStatus !== 'deleted')
+    .sort((a, b) => b.createdAtMs - a.createdAtMs);
 }
 
 export async function markEntryDeleted(id: string): Promise<void> {
