@@ -5,10 +5,8 @@ import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
-  const isGhPages = process.env.GITHUB_PAGES === 'true';
-
   return {
-    base: isGhPages ? './' : '/',
+    base: './',
     plugins: [
       react(),
       tailwindcss(),
@@ -16,7 +14,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
-          id: '/',
+          id: './',
           name: 'Lest We Forget',
           short_name: 'LestWeForget',
           description: 'A minimalist offline-first gratitude vault displaying shared moments on white and brown kraft gift tags.',
@@ -24,8 +22,8 @@ export default defineConfig(() => {
           background_color: '#F6F3EE',
           display: 'standalone',
           orientation: 'portrait-primary',
-          start_url: isGhPages ? './' : '/',
-          scope: isGhPages ? './' : '/',
+          start_url: './',
+          scope: './',
           icons: [
             {
               src: 'pwa-192x192.png',
