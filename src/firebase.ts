@@ -62,11 +62,38 @@ export interface FirestoreErrorInfo {
   };
 }
 
+export function isOfflineFirestoreError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    msg.includes('client is offline') ||
+    msg.includes('unavailable') ||
+    msg.includes('network-request-failed') ||
+    msg.includes('requests-from-referer') ||
+    msg.includes('fetching auth token failed')
+  );
+}
+
+export function formatFriendlySyncError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (raw.includes('requests-from-referer')) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://*.europe-west2.run.app';
+    return `API key referrer restriction blocked ${origin}. Add "${origin}/*" and "https://*.europe-west2.run.app/*" under Website restrictions in Google Cloud Console → Credentials.`;
+  }
+  if (isOfflineFirestoreError(error)) {
+    return 'Working in offline mode (cached locally on this device).';
+  }
+  return raw;
+}
+
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
 ): never {
+  if (isOfflineFirestoreError(error)) {
+    throw new Error(formatFriendlySyncError(error));
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -91,11 +118,7 @@ export function handleFirestoreError(
 export async function testFirestoreConnection(): Promise<void> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
+  } catch {
+    // Offline or restricted-referrer fallback is handled gracefully by syncService
   }
 }
-
-void testFirestoreConnection();

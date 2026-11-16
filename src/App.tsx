@@ -229,6 +229,20 @@ export default function App() {
 
       setDeniedEmail(null);
       setIsSyncing(true);
+
+      let localSeen = 0;
+      try {
+        const raw = localStorage.getItem(`lest_we_forget_last_seen_${currentUser.uid}`);
+        if (raw) {
+          const parsed = Number(raw);
+          if (!Number.isNaN(parsed) && parsed >= 0) localSeen = parsed;
+        }
+      } catch {
+        // Ignore storage access errors
+      }
+      setLastSeenMs(localSeen);
+      setRecentDrawIds(getLocalRecentDrawIds(currentUser.uid));
+
       try {
         const localPrefs = await getPreferences();
         if (navigator.onLine) {
@@ -242,35 +256,23 @@ export default function App() {
           setRecentDrawIds(memberState.recentDrawIds);
           await pushAllPendingEntries(currentUser.uid);
         } else {
-          let localSeen = 0;
-          try {
-            const raw = localStorage.getItem(`lest_we_forget_last_seen_${currentUser.uid}`);
-            if (raw) {
-              const parsed = Number(raw);
-              if (!Number.isNaN(parsed) && parsed >= 0) localSeen = parsed;
-            }
-          } catch {
-            // Ignore storage access errors
-          }
-          setLastSeenMs(localSeen);
-          setRecentDrawIds(getLocalRecentDrawIds(currentUser.uid));
           setIsSyncing(false);
         }
-
-        unsubSnapshot = subscribeToCloudEntries(
-          (merged) => {
-            setEntries(merged);
-            setIsSyncing(false);
-          },
-          (err) => {
-            setSyncError(err.message);
-            setIsSyncing(false);
-          }
-        );
       } catch (err) {
         setSyncError(err instanceof Error ? err.message : 'Cloud sync error.');
         setIsSyncing(false);
       }
+
+      unsubSnapshot = subscribeToCloudEntries(
+        (merged) => {
+          setEntries(merged);
+          setIsSyncing(false);
+        },
+        (err) => {
+          setSyncError(err.message);
+          setIsSyncing(false);
+        }
+      );
     });
 
     return () => {
