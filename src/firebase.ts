@@ -1,7 +1,35 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+interface AppletFirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId: string;
+  firestoreDatabaseId: string;
+}
+
+const localConfigModules = import.meta.glob<{ default: AppletFirebaseConfig }>(
+  '../firebase-applet-config.json',
+  { eager: true }
+);
+const localFileConfig = localConfigModules['../firebase-applet-config.json']?.default;
+
+const firebaseConfig: AppletFirebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || localFileConfig?.apiKey || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || localFileConfig?.authDomain || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || localFileConfig?.projectId || '',
+  storageBucket:
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || localFileConfig?.storageBucket || '',
+  messagingSenderId:
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || localFileConfig?.messagingSenderId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || localFileConfig?.appId || '',
+  firestoreDatabaseId:
+    import.meta.env.VITE_FIREBASE_DATABASE_ID || localFileConfig?.firestoreDatabaseId || '(default)',
+};
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
